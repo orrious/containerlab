@@ -118,6 +118,13 @@ func (n *NodeDefinition) UnmarshalYAML(unmarshal func(any) error) error {
 	if err != nil {
 		return err
 	}
+	nodeBuild, err := normalizeNodeBuildDefinition(raw)
+	if err != nil {
+		return err
+	}
+	if imageBuild != nil && nodeBuild != nil {
+		return fmt.Errorf("image.build and build cannot both be set on the same node")
+	}
 
 	encoded, err := yaml.Marshal(raw)
 	if err != nil {
@@ -132,6 +139,9 @@ func (n *NodeDefinition) UnmarshalYAML(unmarshal func(any) error) error {
 
 	*n = NodeDefinition(nd.NodeDefinitionAlias)
 	n.ImageBuild = imageBuild
+	if nodeBuild != nil {
+		n.ImageBuild = nodeBuild
+	}
 
 	if nd.LegacyUsername != "" && n.Credentials.Username == "" {
 		n.Credentials.Username = nd.LegacyUsername
@@ -141,6 +151,22 @@ func (n *NodeDefinition) UnmarshalYAML(unmarshal func(any) error) error {
 	}
 
 	return nil
+}
+
+func normalizeNodeBuildDefinition(raw map[interface{}]interface{}) (*ImageBuildDefinition, error) {
+	buildRaw, ok := raw["build"]
+	if !ok {
+		return nil, nil
+	}
+	encoded, err := yaml.Marshal(buildRaw)
+	if err != nil {
+		return nil, err
+	}
+	build := &ImageBuildDefinition{}
+	if err := yaml.Unmarshal(encoded, build); err != nil {
+		return nil, err
+	}
+	return build, nil
 }
 
 func normalizeImageDefinition(raw map[interface{}]interface{}) (*ImageBuildDefinition, error) {

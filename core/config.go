@@ -50,14 +50,15 @@ const (
 
 // Config defines lab configuration as it is provided in the YAML file.
 type Config struct {
-	Name     string              `json:"name,omitempty"`
-	Prefix   *string             `json:"prefix,omitempty"`
-	Mgmt     *clabtypes.MgmtNet  `json:"mgmt,omitempty"`
-	Settings *clabtypes.Settings `json:"settings,omitempty"`
-	Topology *clabtypes.Topology `json:"topology,omitempty"`
+	Name     string                                `json:"name,omitempty" yaml:"name,omitempty"`
+	Prefix   *string                               `json:"prefix,omitempty" yaml:"prefix,omitempty"`
+	Mgmt     *clabtypes.MgmtNet                    `json:"mgmt,omitempty" yaml:"mgmt,omitempty"`
+	Settings *clabtypes.Settings                   `json:"settings,omitempty" yaml:"settings,omitempty"`
+	Images   map[string]*clabtypes.ImageDefinition `json:"images,omitempty" yaml:"images,omitempty"`
+	Topology *clabtypes.Topology                   `json:"topology,omitempty" yaml:"topology,omitempty"`
 	// the debug flag value as passed via cli
 	// may be used by other packages to enable debug logging
-	Debug bool `json:"debug"`
+	Debug bool `json:"debug" yaml:"debug"`
 }
 
 // ParseTopology parses the lab topology.

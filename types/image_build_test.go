@@ -45,6 +45,46 @@ image:
 	}
 }
 
+func TestNodeDefinitionBuildShorthand(t *testing.T) {
+	t.Parallel()
+	var n NodeDefinition
+	if err := yaml.Unmarshal([]byte(`
+image: localhost/example:latest
+build:
+  mode: topology
+  rebuild: if-missing
+  builder:
+    image: localhost/base:latest
+    cmd: /usr/local/bin/build
+`), &n); err != nil {
+		t.Fatal(err)
+	}
+	if n.Image != "localhost/example:latest" {
+		t.Fatalf("got image %q", n.Image)
+	}
+	if n.ImageBuild == nil {
+		t.Fatal("expected image build")
+	}
+	if n.ImageBuild.Mode != ImageBuildModeTopology || n.ImageBuild.Rebuild != ImageBuildRebuildIfMissing {
+		t.Fatalf("unexpected build config %#v", n.ImageBuild)
+	}
+}
+
+func TestNodeDefinitionImageObjectBuildAndShorthandConflict(t *testing.T) {
+	t.Parallel()
+	var n NodeDefinition
+	if err := yaml.Unmarshal([]byte(`
+image:
+  name: localhost/example:latest
+  build:
+    mode: pre-deploy
+build:
+  mode: pre-deploy
+`), &n); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestNodeDefinitionImageObjectRequiresName(t *testing.T) {
 	t.Parallel()
 	var n NodeDefinition

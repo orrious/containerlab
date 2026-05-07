@@ -23,6 +23,88 @@
                 }
             }
         },
+        "image-build": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "pre-deploy",
+                        "topology"
+                    ]
+                },
+                "rebuild": {
+                    "type": "string",
+                    "enum": [
+                        "if-missing",
+                        "always",
+                        "never"
+                    ]
+                },
+                "node": {
+                    "type": "string"
+                },
+                "context": {
+                    "type": "string"
+                },
+                "dockerfile": {
+                    "type": "string"
+                },
+                "network": {
+                    "type": "string"
+                },
+                "builder": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "image": {
+                            "type": "string"
+                        },
+                        "entrypoint": {
+                            "type": "string"
+                        },
+                        "cmd": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "commit": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "entrypoint": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "cmd": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "managed-image": {
+            "type": "object",
+            "description": "managed image target",
+            "required": [
+                "image"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "image": {
+                    "type": "string"
+                },
+                "build": {
+                    "$ref": "#/definitions/image-build"
+                }
+            }
+        },
         "node-config": {
             "type": "object",
             "description": "topology node configuration container",
@@ -65,6 +147,9 @@
                                                                                                                                                                 "always",
                                                                                                                                                                 "never"
                                                                                                                                             ]
+                                                                                                                                        },
+                                                                                                                        "node": {
+                                                                                                                                            "type": "string"
                                                                                                                         },
                                                                                                                         "context": {
                                                                                                                                             "type": "string"
@@ -114,6 +199,9 @@
                                         }
                     ]
 },
+                "build": {
+                    "$ref": "#/definitions/image-build"
+                },
                 "image-pull-policy": {
                     "type": "string",
                     "description": "policy for pulling the referenced container image",
@@ -2014,6 +2102,16 @@
                 }
             },
             "minProperties": 1,
+            "additionalProperties": false
+        },
+        "images": {
+            "description": "managed image targets",
+            "type": "object",
+            "patternProperties": {
+                "^[a-zA-Z0-9][a-zA-Z0-9-._]*$": {
+                    "$ref": "#/definitions/managed-image"
+                }
+            },
             "additionalProperties": false
         },
         "topology": {

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"reflect"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -13,53 +16,217 @@ import (
 	clabtypes "github.com/srl-labs/containerlab/types"
 )
 
+type imageBuildTarget struct {
+	Key      string
+	Image    string
+	Build    *clabtypes.ImageBuildDefinition
+	Node     clabnodes.Node
+	NodeName string
+	Source   string
+}
+
 func (c *CLab) validateImageBuildDefinitions() error {
-	for _, node := range c.Nodes {
-		cfg := node.Config()
-		if err := cfg.ImageBuild.Validate(cfg.Image); err != nil {
-			return fmt.Errorf("node %q image.build: %w", cfg.ShortName, err)
-		}
+	targets, err := c.resolveImageBuildTargets()
+	if err != nil {
+		return err
 	}
+	c.setImageBuildTargets(targets)
 	return nil
 }
 
-func (c *CLab) buildPreDeployImages(ctx context.Context) error {
-	for _, node := range c.Nodes {
-		build := node.Config().ImageBuild
-		if build == nil || build.Mode != clabtypes.ImageBuildModePreDeploy {
+func (c *CLab) ensureImageBuildTargets() error {
+	if c.imageBuildTargets != nil {
+		return nil
+	}
+	targets, err := c.resolveImageBuildTargets()
+	if err != nil {
+		return err
+	}
+	c.setImageBuildTargets(targets)
+	return nil
+}
+
+func (c *CLab) setImageBuildTargets(targets []*imageBuildTarget) {
+	c.imageBuildTargets = targets
+	c.managedImageNames = make(map[string]struct{}, len(targets))
+	for _, target := range targets {
+		c.managedImageNames[target.Image] = struct{}{}
+	}
+}
+
+func (c *CLab) resolveImageBuildTargets() ([]*imageBuildTarget, error) {
+	targets := make([]*imageBuildTarget, 0)
+	byImage := map[string]*imageBuildTarget{}
+
+	addTarget := func(target *imageBuildTarget) error {
+		target.Image = strings.TrimSpace(target.Image)
+		if target.Image == "" {
+			return fmt.Errorf("%s.image is required when build is set", target.Source)
+		}
+		target.Build.Normalize()
+		if target.Build.Mode == clabtypes.ImageBuildModeTopology {
+			if err := c.bindTopologyImageBuildTarget(target); err != nil {
+				return err
+			}
+		}
+		if err := target.Build.Validate(target.Image); err != nil {
+			return fmt.Errorf("%s.build: %w", target.Source, err)
+		}
+
+		if existing, ok := byImage[target.Image]; ok {
+			if !reflect.DeepEqual(existing.Build, target.Build) {
+				return fmt.Errorf(
+					"image build target %q conflicts with %s; duplicate image %q must use an identical build definition",
+					target.Source,
+					existing.Source,
+					target.Image,
+				)
+			}
+			return nil
+		}
+		byImage[target.Image] = target
+		targets = append(targets, target)
+		return nil
+	}
+
+	rootImageKeys := make([]string, 0, len(c.Config.Images))
+	for key := range c.Config.Images {
+		rootImageKeys = append(rootImageKeys, key)
+	}
+	sort.Strings(rootImageKeys)
+	for _, key := range rootImageKeys {
+		imageDef := c.Config.Images[key]
+		source := fmt.Sprintf("images.%s", key)
+		if imageDef == nil {
+			return nil, fmt.Errorf("%s must not be empty", source)
+		}
+		if strings.TrimSpace(imageDef.Image) == "" {
+			return nil, fmt.Errorf("%s.image is required", source)
+		}
+		if imageDef.Build == nil {
 			continue
 		}
-		if err := c.buildNodeImage(ctx, node); err != nil {
+		if err := addTarget(&imageBuildTarget{
+			Key:    key,
+			Image:  imageDef.Image,
+			Build:  imageDef.Build,
+			Source: source,
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	nodeNames := make([]string, 0, len(c.Nodes))
+	for nodeName := range c.Nodes {
+		nodeNames = append(nodeNames, nodeName)
+	}
+	sort.Strings(nodeNames)
+	for _, nodeName := range nodeNames {
+		node := c.Nodes[nodeName]
+		cfg := node.Config()
+		build := cfg.ImageBuild
+		if build == nil {
+			continue
+		}
+		if build.Node != "" && build.Node != nodeName {
+			return nil, fmt.Errorf("node %q build.node must either be omitted or match the node name", nodeName)
+		}
+		build.Node = nodeName
+		if err := addTarget(&imageBuildTarget{
+			Key:      nodeName,
+			Image:    cfg.Image,
+			Build:    build,
+			Node:     node,
+			NodeName: nodeName,
+			Source:   fmt.Sprintf("node %q", nodeName),
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	return targets, nil
+}
+
+func (c *CLab) bindTopologyImageBuildTarget(target *imageBuildTarget) error {
+	if target.Build.Node != "" {
+		node, ok := c.Nodes[target.Build.Node]
+		if !ok {
+			return fmt.Errorf("%s.build.node %q references an unknown node", target.Source, target.Build.Node)
+		}
+		target.Node = node
+		target.NodeName = target.Build.Node
+		return nil
+	}
+	if target.NodeName != "" {
+		target.Build.Node = target.NodeName
+		return nil
+	}
+
+	consumers := make([]string, 0)
+	for nodeName, node := range c.Nodes {
+		if node.Config().Image == target.Image {
+			consumers = append(consumers, nodeName)
+		}
+	}
+	sort.Strings(consumers)
+	switch len(consumers) {
+	case 0:
+		return fmt.Errorf("%s.build.node is required because no node consumes image %q", target.Source, target.Image)
+	case 1:
+		target.NodeName = consumers[0]
+		target.Node = c.Nodes[consumers[0]]
+		target.Build.Node = consumers[0]
+		return nil
+	default:
+		return fmt.Errorf(
+			"%s.build.node is required because image %q is consumed by multiple nodes: %s",
+			target.Source,
+			target.Image,
+			strings.Join(consumers, ", "),
+		)
+	}
+}
+
+func (c *CLab) buildPreDeployImages(ctx context.Context) error {
+	if err := c.ensureImageBuildTargets(); err != nil {
+		return err
+	}
+	for _, target := range c.imageBuildTargets {
+		if target.Build.Mode != clabtypes.ImageBuildModePreDeploy {
+			continue
+		}
+		if err := c.buildImageTarget(ctx, target); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *CLab) buildNodeImage(ctx context.Context, node clabnodes.Node) error {
-	cfg := node.Config()
-	build := cfg.ImageBuild
-	if build == nil {
-		return nil
-	}
-	if err := build.Validate(cfg.Image); err != nil {
-		return fmt.Errorf("node %q image.build: %w", cfg.ShortName, err)
+func (c *CLab) buildImageTarget(ctx context.Context, target *imageBuildTarget) error {
+	build := target.Build
+	if err := build.Validate(target.Image); err != nil {
+		return fmt.Errorf("%s.build: %w", target.Source, err)
 	}
 
-	exists, err := node.GetRuntime().ImageExists(ctx, cfg.Image)
+	rt := c.globalRuntime()
+	if target.Node != nil {
+		rt = target.Node.GetRuntime()
+	}
+
+	exists, err := rt.ImageExists(ctx, target.Image)
 	if err != nil {
-		return fmt.Errorf("node %q inspect image %q: %w", cfg.ShortName, cfg.Image, err)
+		return fmt.Errorf("%s inspect image %q: %w", target.Source, target.Image, err)
 	}
 
 	switch build.Rebuild {
 	case clabtypes.ImageBuildRebuildNever:
 		if !exists {
-			return fmt.Errorf("node %q image %q is missing and image.build.rebuild=never prevents building it", cfg.ShortName, cfg.Image)
+			return fmt.Errorf("%s image %q is missing and build.rebuild=never prevents building it", target.Source, target.Image)
 		}
 		return nil
 	case clabtypes.ImageBuildRebuildIfMissing:
 		if exists {
-			log.Debugf("image %s present, skip build", cfg.Image)
+			log.Debugf("image %s present, skip build", target.Image)
 			return nil
 		}
 	case clabtypes.ImageBuildRebuildAlways:
@@ -70,53 +237,104 @@ func (c *CLab) buildNodeImage(ctx context.Context, node clabnodes.Node) error {
 		contextPath = filepath.Join(c.TopoPaths.TopologyFileDir(), contextPath)
 	}
 
-	log.Info("Building image", "image", cfg.Image, "node", cfg.ShortName)
-	return node.GetRuntime().BuildImage(ctx, &clabtypes.ImageBuildOptions{
-		Name:       cfg.Image,
+	log.Info("Building image", "image", target.Image, "source", target.Source)
+	return rt.BuildImage(ctx, &clabtypes.ImageBuildOptions{
+		Name:       target.Image,
 		Context:    contextPath,
 		Dockerfile: build.Dockerfile,
 		Network:    build.Network,
 	})
 }
 
-func shouldSkipPullForBuiltNodeImage(node clabnodes.Node, imageKey string) bool {
-	build := node.Config().ImageBuild
-	return imageKey == clabnodes.ImageKey && build != nil && build.Mode == clabtypes.ImageBuildModePreDeploy
+func (c *CLab) shouldSkipPullForManagedImage(imageKey, imageName string) bool {
+	if imageKey != clabnodes.ImageKey {
+		return false
+	}
+	if err := c.ensureImageBuildTargets(); err != nil {
+		return false
+	}
+	_, ok := c.managedImageNames[imageName]
+	return ok
 }
 
-func topologyBuilderImage(node clabnodes.Node, imageKey string) (string, bool) {
-	build := node.Config().ImageBuild
-	if imageKey != clabnodes.ImageKey || build == nil || build.Mode != clabtypes.ImageBuildModeTopology {
-		return "", false
+func (c *CLab) topologyBuilderImagesForNode(node clabnodes.Node) ([]string, error) {
+	if err := c.ensureImageBuildTargets(); err != nil {
+		return nil, err
 	}
-	if build.Builder == nil {
-		return "", true
+	nodeName := node.Config().ShortName
+	images := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, target := range c.imageBuildTargets {
+		if target.Build.Mode != clabtypes.ImageBuildModeTopology || target.NodeName != nodeName {
+			continue
+		}
+		if target.Build.Builder == nil || target.Build.Builder.Image == "" {
+			continue
+		}
+		image := target.Build.Builder.Image
+		if _, managed := c.managedImageNames[image]; managed {
+			continue
+		}
+		if _, ok := seen[image]; ok {
+			continue
+		}
+		seen[image] = struct{}{}
+		images = append(images, image)
 	}
-	return build.Builder.Image, true
+	sort.Strings(images)
+	return images, nil
+}
+
+func (c *CLab) topologyTargetsForNode(node clabnodes.Node) ([]*imageBuildTarget, error) {
+	if err := c.ensureImageBuildTargets(); err != nil {
+		return nil, err
+	}
+	nodeName := node.Config().ShortName
+	targets := make([]*imageBuildTarget, 0)
+	for _, target := range c.imageBuildTargets {
+		if target.Build.Mode == clabtypes.ImageBuildModeTopology && target.NodeName == nodeName {
+			targets = append(targets, target)
+		}
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		return targets[i].Source < targets[j].Source
+	})
+	return targets, nil
 }
 
 func (c *CLab) buildTopologyImage(ctx context.Context, node clabnodes.Node, _ bool, _ *clabexec.ExecCollection) error {
-	cfg := node.Config()
-	build := cfg.ImageBuild
-	if build == nil || build.Mode != clabtypes.ImageBuildModeTopology {
-		return nil
+	targets, err := c.topologyTargetsForNode(node)
+	if err != nil {
+		return err
 	}
-	if err := build.Validate(cfg.Image); err != nil {
-		return fmt.Errorf("node %q image.build: %w", cfg.ShortName, err)
+	for _, target := range targets {
+		if err := c.buildTopologyImageTarget(ctx, target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *CLab) buildTopologyImageTarget(ctx context.Context, target *imageBuildTarget) error {
+	node := target.Node
+	cfg := node.Config()
+	build := target.Build
+	if err := build.Validate(target.Image); err != nil {
+		return fmt.Errorf("%s.build: %w", target.Source, err)
 	}
 
-	exists, err := node.GetRuntime().ImageExists(ctx, cfg.Image)
+	exists, err := node.GetRuntime().ImageExists(ctx, target.Image)
 	if err != nil {
-		return fmt.Errorf("node %q inspect image %q: %w", cfg.ShortName, cfg.Image, err)
+		return fmt.Errorf("%s inspect image %q: %w", target.Source, target.Image, err)
 	}
 	if build.Rebuild == clabtypes.ImageBuildRebuildNever {
 		if !exists {
-			return fmt.Errorf("node %q image %q is missing and image.build.rebuild=never prevents building it", cfg.ShortName, cfg.Image)
+			return fmt.Errorf("%s image %q is missing and build.rebuild=never prevents building it", target.Source, target.Image)
 		}
 		return nil
 	}
 	if build.Rebuild == clabtypes.ImageBuildRebuildIfMissing && exists {
-		log.Debugf("image %s present, skip topology build", cfg.Image)
+		log.Debugf("image %s present, skip topology build", target.Image)
 		return nil
 	}
 
@@ -132,7 +350,7 @@ func (c *CLab) buildTopologyImage(ctx context.Context, node clabnodes.Node, _ bo
 		cfg.Entrypoint = origEntrypoint
 	}()
 
-	log.Info("Starting topology image builder", "node", cfg.ShortName, "image", origImage)
+	log.Info("Starting topology image builder", "node", cfg.ShortName, "image", target.Image)
 	if err := node.Deploy(ctx, &clabnodes.DeployParams{Nodes: c.Nodes}); err != nil {
 		return fmt.Errorf("builder deploy: %w", err)
 	}
@@ -161,7 +379,7 @@ func (c *CLab) buildTopologyImage(ctx context.Context, node clabnodes.Node, _ bo
 	}
 
 	containerName := node.Config().LongName
-	if err := node.GetRuntime().CommitContainer(ctx, containerName, origImage, build.Commit); err != nil {
+	if err := node.GetRuntime().CommitContainer(ctx, containerName, target.Image, build.Commit); err != nil {
 		return fmt.Errorf("commit topology builder: %w", err)
 	}
 	if err := removeNodeLinks(ctx, node); err != nil {

@@ -61,8 +61,10 @@ type CLab struct {
 	customOwner string
 	// gitBranch and gitHash cache Git repository information
 	// to avoid repeated repository opens. Empty strings indicate not yet cached.
-	gitBranch string
-	gitHash   string
+	gitBranch         string
+	gitHash           string
+	imageBuildTargets []*imageBuildTarget
+	managedImageNames map[string]struct{}
 }
 
 // NewContainerLab function defines a new container lab.

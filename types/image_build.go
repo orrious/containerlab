@@ -21,11 +21,17 @@ type ImageBuildRebuild string
 type ImageBuildDefinition struct {
 	Mode       ImageBuildMode     `json:"mode,omitempty" yaml:"mode,omitempty"`
 	Rebuild    ImageBuildRebuild  `json:"rebuild,omitempty" yaml:"rebuild,omitempty"`
+	Node       string             `json:"node,omitempty" yaml:"node,omitempty"`
 	Context    string             `json:"context,omitempty" yaml:"context,omitempty"`
 	Dockerfile string             `json:"dockerfile,omitempty" yaml:"dockerfile,omitempty"`
 	Network    string             `json:"network,omitempty" yaml:"network,omitempty"`
 	Builder    *ImageBuildBuilder `json:"builder,omitempty" yaml:"builder,omitempty"`
 	Commit     *ImageBuildCommit  `json:"commit,omitempty" yaml:"commit,omitempty"`
+}
+
+type ImageDefinition struct {
+	Image string                `json:"image,omitempty" yaml:"image,omitempty"`
+	Build *ImageBuildDefinition `json:"build,omitempty" yaml:"build,omitempty"`
 }
 
 type ImageBuildBuilder struct {
