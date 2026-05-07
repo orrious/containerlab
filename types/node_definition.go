@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -20,22 +21,23 @@ type NodeCredentials struct {
 
 // NodeDefinition represents a configuration a given node can have in the lab definition file.
 type NodeDefinition struct {
-	Kind                  string            `yaml:"kind,omitempty"`
-	Group                 string            `yaml:"group,omitempty"`
-	Type                  string            `yaml:"type,omitempty"`
-	StartupConfig         string            `yaml:"startup-config,omitempty"`
-	StartupDelay          uint              `yaml:"startup-delay,omitempty"`
-	EnforceStartupConfig  *bool             `yaml:"enforce-startup-config,omitempty"`
-	SuppressStartupConfig *bool             `yaml:"suppress-startup-config,omitempty"`
-	AutoRemove            *bool             `yaml:"auto-remove,omitempty"`
-	RestartPolicy         string            `yaml:"restart-policy,omitempty"`
-	Config                *ConfigDispatcher `yaml:"config,omitempty"`
-	Image                 string            `yaml:"image,omitempty"`
-	ImagePullPolicy       string            `yaml:"image-pull-policy,omitempty"`
-	License               string            `yaml:"license,omitempty"`
-	Position              string            `yaml:"position,omitempty"`
-	Entrypoint            string            `yaml:"entrypoint,omitempty"`
-	Cmd                   string            `yaml:"cmd,omitempty"`
+	Kind                  string                `yaml:"kind,omitempty"`
+	Group                 string                `yaml:"group,omitempty"`
+	Type                  string                `yaml:"type,omitempty"`
+	StartupConfig         string                `yaml:"startup-config,omitempty"`
+	StartupDelay          uint                  `yaml:"startup-delay,omitempty"`
+	EnforceStartupConfig  *bool                 `yaml:"enforce-startup-config,omitempty"`
+	SuppressStartupConfig *bool                 `yaml:"suppress-startup-config,omitempty"`
+	AutoRemove            *bool                 `yaml:"auto-remove,omitempty"`
+	RestartPolicy         string                `yaml:"restart-policy,omitempty"`
+	Config                *ConfigDispatcher     `yaml:"config,omitempty"`
+	Image                 string                `yaml:"image,omitempty"`
+	ImageBuild            *ImageBuildDefinition `yaml:"-"`
+	ImagePullPolicy       string                `yaml:"image-pull-policy,omitempty"`
+	License               string                `yaml:"license,omitempty"`
+	Position              string                `yaml:"position,omitempty"`
+	Entrypoint            string                `yaml:"entrypoint,omitempty"`
+	Cmd                   string                `yaml:"cmd,omitempty"`
 	// list of commands to run in container
 	Exec []string `yaml:"exec,omitempty"`
 	// list of bind mount compatible strings
@@ -107,14 +109,29 @@ func (n *NodeDefinition) UnmarshalYAML(unmarshal func(any) error) error {
 		LegacyPassword      string `yaml:"password,omitempty"`
 	}
 
-	nd := &NodeDefinitionWithDeprecatedFields{}
+	raw := map[interface{}]interface{}{}
+	if err := unmarshal(raw); err != nil {
+		return err
+	}
 
+	imageBuild, err := normalizeImageDefinition(raw)
+	if err != nil {
+		return err
+	}
+
+	encoded, err := yaml.Marshal(raw)
+	if err != nil {
+		return err
+	}
+
+	nd := &NodeDefinitionWithDeprecatedFields{}
 	nd.NodeDefinitionAlias = NodeDefinitionAlias(*n)
-	if err := unmarshal(nd); err != nil {
+	if err := yaml.Unmarshal(encoded, nd); err != nil {
 		return err
 	}
 
 	*n = NodeDefinition(nd.NodeDefinitionAlias)
+	n.ImageBuild = imageBuild
 
 	if nd.LegacyUsername != "" && n.Credentials.Username == "" {
 		n.Credentials.Username = nd.LegacyUsername
@@ -124,6 +141,47 @@ func (n *NodeDefinition) UnmarshalYAML(unmarshal func(any) error) error {
 	}
 
 	return nil
+}
+
+func normalizeImageDefinition(raw map[interface{}]interface{}) (*ImageBuildDefinition, error) {
+	imageRaw, ok := raw["image"]
+	if !ok {
+		return nil, nil
+	}
+
+	switch image := imageRaw.(type) {
+	case string:
+		return nil, nil
+	case map[interface{}]interface{}:
+		nameRaw, ok := image["name"]
+		if !ok {
+			return nil, fmt.Errorf("image.name is required when image is an object")
+		}
+		name, ok := nameRaw.(string)
+		if !ok || strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("image.name must be a non-empty string")
+		}
+
+		var build *ImageBuildDefinition
+		if buildRaw, ok := image["build"]; ok {
+			encoded, err := yaml.Marshal(buildRaw)
+			if err != nil {
+				return nil, err
+			}
+			build = &ImageBuildDefinition{}
+			if err := yaml.Unmarshal(encoded, build); err != nil {
+				return nil, err
+			}
+			if err := build.Validate(name); err != nil {
+				return nil, err
+			}
+		}
+
+		raw["image"] = name
+		return build, nil
+	default:
+		return nil, fmt.Errorf("image must be a string or an object")
+	}
 }
 
 // ImportEnvs imports all environment variables defined in the shell

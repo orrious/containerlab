@@ -33,6 +33,12 @@ type ContainerRuntime interface {
 	DeleteNet(context.Context) error
 	// Pull container image if not present
 	PullImage(context.Context, string, clabtypes.PullPolicyValue) error
+	// ImageExists returns true when an image is present locally.
+	ImageExists(context.Context, string) (bool, error)
+	// BuildImage builds a container image.
+	BuildImage(context.Context, *clabtypes.ImageBuildOptions) error
+	// CommitContainer commits a container to an image.
+	CommitContainer(context.Context, string, string, *clabtypes.ImageBuildCommit) error
 	// CreateContainer creates a container, but does not start it
 	CreateContainer(context.Context, *clabtypes.NodeConfig) (string, error)
 	// Start pre-created container by its name. Returns an extra interface that can be used to

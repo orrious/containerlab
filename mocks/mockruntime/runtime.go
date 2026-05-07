@@ -363,6 +363,49 @@ func (mr *MockContainerRuntimeMockRecorder) PauseContainer(arg0, arg1 any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseContainer", reflect.TypeOf((*MockContainerRuntime)(nil).PauseContainer), arg0, arg1)
 }
 
+// ImageExists mocks base method.
+func (m *MockContainerRuntime) ImageExists(arg0 context.Context, arg1 string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ImageExists", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImageExists indicates an expected call of ImageExists.
+func (mr *MockContainerRuntimeMockRecorder) ImageExists(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImageExists", reflect.TypeOf((*MockContainerRuntime)(nil).ImageExists), arg0, arg1)
+}
+
+// BuildImage mocks base method.
+func (m *MockContainerRuntime) BuildImage(arg0 context.Context, arg1 *types.ImageBuildOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BuildImage", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BuildImage indicates an expected call of BuildImage.
+func (mr *MockContainerRuntimeMockRecorder) BuildImage(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BuildImage", reflect.TypeOf((*MockContainerRuntime)(nil).BuildImage), arg0, arg1)
+}
+
+// CommitContainer mocks base method.
+func (m *MockContainerRuntime) CommitContainer(arg0 context.Context, arg1, arg2 string, arg3 *types.ImageBuildCommit) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitContainer", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CommitContainer indicates an expected call of CommitContainer.
+func (mr *MockContainerRuntimeMockRecorder) CommitContainer(arg0, arg1, arg2, arg3 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitContainer", reflect.TypeOf((*MockContainerRuntime)(nil).CommitContainer), arg0, arg1, arg2, arg3)
+}
+
 // PullImage mocks base method.
 func (m *MockContainerRuntime) PullImage(arg0 context.Context, arg1 string, arg2 types.PullPolicyValue) error {
 	m.ctrl.T.Helper()

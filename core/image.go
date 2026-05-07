@@ -73,6 +73,12 @@ func (c *CLab) pullNodeImages(
 	images := node.GetImages(ctx)
 
 	for imageKey, imageName := range images {
+		if shouldSkipPullForBuiltNodeImage(node, imageKey) {
+			continue
+		}
+		if builderImage, ok := topologyBuilderImage(node, imageKey); ok {
+			imageName = builderImage
+		}
 		if imageName == "" {
 			errCh <- fmt.Errorf(
 				"missing required %q attribute for node %q", imageKey, node.Config().ShortName,

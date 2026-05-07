@@ -1247,6 +1247,10 @@ func (d *DockerRuntime) StopContainer(
 
 	if stopSignal != "" {
 		stopOpts.Signal = string(stopSignal)
+		if stopSignal == clabtypes.SIGKILL {
+			timeout = 0
+			stopOpts.Timeout = &timeout
+		}
 		log.Debugf("using custom stop signal %q for container %q", stopSignal, name)
 	}
 

@@ -222,6 +222,7 @@ func (c *CLab) createNodeCfg( //nolint: funlen
 		NodeType:        c.Config.Topology.GetNodeType(nodeName),
 		Position:        c.Config.Topology.GetNodePosition(nodeName),
 		Image:           c.Config.Topology.GetNodeImage(nodeName),
+		ImageBuild:      c.Config.Topology.GetNodeImageBuild(nodeName),
 		ImagePullPolicy: c.Config.Topology.GetNodeImagePullPolicy(nodeName),
 		User:            c.Config.Topology.GetNodeUser(nodeName),
 		Entrypoint:      c.Config.Topology.GetNodeEntrypoint(nodeName),
@@ -427,6 +428,14 @@ func (c *CLab) checkTopologyDefinition(ctx context.Context) error {
 	}
 
 	if err := c.verifyContainersUniqueness(ctx); err != nil {
+		return err
+	}
+
+	if err := c.validateImageBuildDefinitions(); err != nil {
+		return err
+	}
+
+	if err := c.buildPreDeployImages(ctx); err != nil {
 		return err
 	}
 

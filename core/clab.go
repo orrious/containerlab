@@ -374,6 +374,13 @@ func (c *CLab) scheduleNodeWorkerF( //nolint: funlen
 				continue
 			}
 
+			err = c.buildTopologyImage(ctx, node, skipPostDeploy, execCollection)
+			if err != nil {
+				log.Errorf("failed topology image build for node %q: %v", node.Config().ShortName, err)
+				nodeFailCh <- fmt.Errorf("node %q image build: %w", node.Config().ShortName, err)
+				continue
+			}
+
 			err = node.Deploy(ctx, &clabnodes.DeployParams{Nodes: c.Nodes})
 			if err != nil {
 				log.Errorf("failed deploy stage for node %q: %v", node.Config().ShortName, err)

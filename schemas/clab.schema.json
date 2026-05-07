@@ -29,10 +29,91 @@
             "markdownDescription": "topology [node](https://containerlab.dev/manual/nodes/) configuration container",
             "properties": {
                 "image": {
-                    "type": "string",
-                    "description": "container image to use for this node",
-                    "markdownDescription": "container [image](https://containerlab.dev/manual/nodes/#image) to use for this node"
-                },
+                                    "oneOf": [
+                                        {
+                                                            "type": "string",
+                                                            "description": "container image to use for this node",
+                                                            "markdownDescription": "container [image](https://containerlab.dev/manual/nodes/#image) to use for this node"
+                                        },
+                                        {
+                                                            "type": "object",
+                                                            "description": "container image and optional build lifecycle configuration",
+                                                            "markdownDescription": "container [image](https://containerlab.dev/manual/nodes/#image) and optional build lifecycle configuration",
+                                                            "required": [
+                                                                                "name"
+                                                            ],
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                                                "name": {
+                                                                                                    "type": "string"
+                                                                                },
+                                                                                "build": {
+                                                                                                    "type": "object",
+                                                                                                    "additionalProperties": false,
+                                                                                                    "properties": {
+                                                                                                                        "mode": {
+                                                                                                                                            "type": "string",
+                                                                                                                                            "enum": [
+                                                                                                                                                                "pre-deploy",
+                                                                                                                                                                "topology"
+                                                                                                                                            ]
+                                                                                                                        },
+                                                                                                                        "rebuild": {
+                                                                                                                                            "type": "string",
+                                                                                                                                            "enum": [
+                                                                                                                                                                "if-missing",
+                                                                                                                                                                "always",
+                                                                                                                                                                "never"
+                                                                                                                                            ]
+                                                                                                                        },
+                                                                                                                        "context": {
+                                                                                                                                            "type": "string"
+                                                                                                                        },
+                                                                                                                        "dockerfile": {
+                                                                                                                                            "type": "string"
+                                                                                                                        },
+                                                                                                                        "network": {
+                                                                                                                                            "type": "string"
+                                                                                                                        },
+                                                                                                                        "builder": {
+                                                                                                                                            "type": "object",
+                                                                                                                                            "additionalProperties": false,
+                                                                                                                                            "properties": {
+                                                                                                                                                                "image": {
+                                                                                                                                                                                    "type": "string"
+                                                                                                                                                                },
+                                                                                                                                                                "entrypoint": {
+                                                                                                                                                                                    "type": "string"
+                                                                                                                                                                },
+                                                                                                                                                                "cmd": {
+                                                                                                                                                                                    "type": "string"
+                                                                                                                                                                }
+                                                                                                                                            }
+                                                                                                                        },
+                                                                                                                        "commit": {
+                                                                                                                                            "type": "object",
+                                                                                                                                            "additionalProperties": false,
+                                                                                                                                            "properties": {
+                                                                                                                                                                "entrypoint": {
+                                                                                                                                                                                    "type": "array",
+                                                                                                                                                                                    "items": {
+                                                                                                                                                                                                        "type": "string"
+                                                                                                                                                                                    }
+                                                                                                                                                                },
+                                                                                                                                                                "cmd": {
+                                                                                                                                                                                    "type": "array",
+                                                                                                                                                                                    "items": {
+                                                                                                                                                                                                        "type": "string"
+                                                                                                                                                                                    }
+                                                                                                                                                                }
+                                                                                                                                            }
+                                                                                                                        }
+                                                                                                    }
+                                                                                }
+                                                            }
+                                        }
+                    ]
+},
                 "image-pull-policy": {
                     "type": "string",
                     "description": "policy for pulling the referenced container image",
