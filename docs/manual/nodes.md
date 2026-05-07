@@ -88,42 +88,42 @@ For example, consider the following possible image definitions:
     - image: `alpine`
     - tag: `3`
 
-The `image` field also accepts an object with a `name` and a `build` lifecycle configuration. The scalar form remains supported and behaves as before.
+Containerlab can also build images before they are used by nodes. The recommended way to describe reusable image builds is the top-level [`images`](images.md#managed-images) section.
+
+A node may also define a `build` section as shorthand for a build that belongs only to that node. The node must still declare or inherit an `image`; internally, containerlab treats the node-level build as an anonymous managed image target for that image.
 
 ```yaml
 topology:
   nodes:
-    app:
+    dpu-01:
       kind: linux
-      image:
-        name: localhost/example:latest
-        build:
-          mode: pre-deploy
-          rebuild: if-missing
-          context: ./app
-          dockerfile: Dockerfile
+      image: localhost/dpu-01:latest
+      build:
+        mode: pre-deploy
+        rebuild: if-missing
+        context: ./dpu-01
+        dockerfile: Dockerfile
 ```
 
-`mode: pre-deploy` builds the image before the node is created. `mode: topology` starts the node temporarily from `build.builder.image`, attaches its topology links, runs the required `build.builder.cmd`, commits it as `image.name`, removes the builder container, then starts the final node from the committed image.
+`mode: pre-deploy` builds the image before the node is created. `mode: topology` starts the node temporarily from `build.builder.image`, attaches its topology links, runs the required `build.builder.cmd`, commits it as the node `image`, removes the builder container, then starts the final node from the committed image.
 
 ```yaml
 topology:
   nodes:
-    app:
+    dpu-01:
       kind: linux
-      image:
-        name: localhost/example:stage3
-        build:
-          mode: topology
-          rebuild: always
-          builder:
-            image: localhost/example:stage2
-            cmd: /usr/local/bin/build-handoff
-          commit:
-            cmd: ["/usr/sbin/init"]
+      image: localhost/dpu-01:stage3
+      build:
+        mode: topology
+        rebuild: always
+        builder:
+          image: localhost/dpu-base:latest
+          cmd: /usr/local/bin/build-dpu-stage3
+        commit:
+          cmd: ["/usr/sbin/init"]
 ```
 
-Build `rebuild` values are `if-missing` (default), `always`, and `never`.
+Build `rebuild` values are `if-missing` (default), `always`, and `never`. See the [image management](images.md#managed-images) page for the full managed image build syntax.
 
 ### image-pull-policy
 

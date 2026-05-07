@@ -98,6 +98,29 @@ When a prefix is set to an empty string, the container name will match the node 
 Even when you change the prefix, the lab directory is still uniformly named using the `clab-<lab-name>` pattern.
 ///
 
+### Images
+
+The optional top-level `images` section defines [managed image targets](images.md#managed-images). Managed images let containerlab build or commit images as part of lab deployment before those images are consumed by nodes.
+
+```yaml
+name: image-build
+
+images:
+  app-base:
+    image: localhost/app-base:latest
+    build:
+      mode: pre-deploy
+      context: ./app-base
+
+topology:
+  nodes:
+    app:
+      kind: linux
+      image: localhost/app-base:latest
+```
+
+The `images` section is a root-level section. It is not nested under `topology`.
+
 ### Topology
 
 The topology object inside the topology definition is the core element of the file. Under the `topology` element you will find all the main building blocks of a topology such as `nodes`, `kinds`, `defaults` and `links`.
