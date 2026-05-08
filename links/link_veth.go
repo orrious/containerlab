@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	clabconstants "github.com/srl-labs/containerlab/constants"
+	clabnodesstate "github.com/srl-labs/containerlab/nodes/state"
 	clabutils "github.com/srl-labs/containerlab/utils"
 	"github.com/vishvananda/netlink"
 )
@@ -184,9 +185,11 @@ func (l *LinkVEth) deployAEnd(ctx context.Context, idx int) error {
 
 	l.DeploymentState = LinkDeploymentStateHalfDeployed
 
-	// e.g. host endpoints are nodeless, and therefore the B end of the veth link should
-	// be deployed right after the A end is deployed.
-	if peerEp.IsNodeless() {
+	// E.g. host endpoints are nodeless, and therefore the B end of the veth link should
+	// be deployed right after the A end is deployed. The same applies when the peer node
+	// is already deployed, such as a topology image builder recreating a final-node link
+	// after the peer node has already completed its normal DeployEndpoints pass.
+	if peerEp.IsNodeless() || peerEp.GetNode().GetState() == clabnodesstate.Deployed {
 		return l.deployBEnd(ctx, peerIdx)
 	}
 

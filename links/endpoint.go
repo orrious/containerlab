@@ -247,6 +247,56 @@ func activateEndpoint(ctx context.Context, e Endpoint) error {
 	})
 }
 
+// ParkEndpointInterface moves an endpoint's current interface into dst's namespace without
+// changing topology ownership. This is used when a temporary container is replaced but its
+// already-wired peer must stay attached to the original peer namespace.
+func ParkEndpointInterface(ctx context.Context, e Endpoint, dst Node) error {
+	if e.GetNode() == nil {
+		return fmt.Errorf("endpoint %q has no source node", e.GetIfaceName())
+	}
+	if dst == nil {
+		return fmt.Errorf("endpoint %q has no destination node", e.GetIfaceName())
+	}
+
+	return e.GetNode().ExecFunction(ctx, func(_ ns.NetNS) error {
+		link, err := netlink.LinkByName(e.GetIfaceName())
+		if err != nil {
+			return err
+		}
+
+		if err := netlink.LinkSetDown(link); err != nil {
+			return err
+		}
+
+		return dst.AddLinkToContainer(ctx, link, func(_ ns.NetNS) error {
+			return nil
+		})
+	})
+}
+
+// RestoreParkedEndpointInterface moves a parked endpoint interface back to its topology owner.
+func RestoreParkedEndpointInterface(ctx context.Context, src Node, e Endpoint) error {
+	if src == nil {
+		return fmt.Errorf("endpoint %q has no parking node", e.GetIfaceName())
+	}
+	if e.GetNode() == nil {
+		return fmt.Errorf("endpoint %q has no destination node", e.GetIfaceName())
+	}
+
+	return src.ExecFunction(ctx, func(_ ns.NetNS) error {
+		link, err := netlink.LinkByName(e.GetIfaceName())
+		if err != nil {
+			return err
+		}
+
+		if err := netlink.LinkSetDown(link); err != nil {
+			return err
+		}
+
+		return e.GetNode().AddLinkToContainer(ctx, link, SetNameMACAndUpInterface(link, e))
+	})
+}
+
 func ensureOwnershipAltName(ctx context.Context, e Endpoint) error {
 	return e.GetNode().ExecFunction(ctx, func(_ ns.NetNS) error {
 		link, err := netlink.LinkByName(e.GetIfaceName())

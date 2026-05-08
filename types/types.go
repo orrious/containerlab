@@ -175,8 +175,9 @@ type NodeConfig struct {
 	PortSet nat.PortSet `json:"portset,omitempty"`
 	// NetworkMode defines container networking mode.
 	// If set to `host` the host networking will be used for this node, else bridged network
-	NetworkMode string `json:"networkmode,omitempty"`
-	PidMode     string `json:"pidmode,omitempty"`
+	NetworkMode  string `json:"networkmode,omitempty"`
+	CgroupnsMode string `json:"cgroupnsmode,omitempty"`
+	PidMode      string `json:"pidmode,omitempty"`
 	// MgmtNet is the name of the docker network this node is connected to with its first interface
 	MgmtNet string `json:"mgmt-net,omitempty"`
 	// MgmtIntf can be used to be rendered by the default node template

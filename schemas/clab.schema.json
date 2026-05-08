@@ -450,6 +450,15 @@
                     "markdownDescription": "node [network mode](https://containerlab.dev/manual/nodes/#network-mode) (can only be set host, defaults to bridge)",
                     "pattern": "^(host)|(container:\\S+)|(none)$"
                 },
+                "cgroupns-mode": {
+                    "type": "string",
+                    "description": "node cgroup namespace mode",
+                    "markdownDescription": "node [cgroup namespace mode](https://containerlab.dev/manual/nodes/#cgroupns-mode)",
+                    "enum": [
+                        "host",
+                        "private"
+                    ]
+                },
                 "cpu": {
                     "type": "number",
                     "description": "number of vcpu to allocate for this node/container",

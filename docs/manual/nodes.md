@@ -589,6 +589,16 @@ Container name used after `container:` portion can refer to a node defined in co
 
 If you want to completely disable the networking stack on a container, you can use the `none` network mode. In this mode containerlab will deploy nodes without `eth0` interface and docker networking. See [docker docs](https://docs.docker.com/network/none/) for more details.
 
+### cgroupns-mode
+
+The `cgroupns-mode` setting controls the cgroup namespace mode used by the container runtime for a node. Valid values are `host` and `private`.
+
+```yaml
+my-node:
+  image: alpine:3
+  cgroupns-mode: host
+```
+
 ### runtime
 
 By default containerlab nodes will be started by `docker` container runtime. Besides that, containerlab has experimental support for `podman` runtime.

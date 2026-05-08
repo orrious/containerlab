@@ -643,6 +643,18 @@ func (t *Topology) GetNodeNetworkMode(nodeName string) string {
 	)
 }
 
+func (t *Topology) GetNodeCgroupnsMode(nodeName string) string {
+	return getField(
+		t,
+		nodeName,
+		func(node *NodeDefinition) string { return node.CgroupnsMode },
+		func(group *NodeDefinition) string { return group.CgroupnsMode },
+		func(kind *NodeDefinition) string { return kind.CgroupnsMode },
+		func(defaults *NodeDefinition) string { return defaults.CgroupnsMode },
+		func(v string) bool { return v != "" },
+	)
+}
+
 func (t *Topology) GetNodeRuntime(nodeName string) string {
 	return getField(
 		t,

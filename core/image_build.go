@@ -11,9 +11,12 @@ import (
 
 	"github.com/charmbracelet/log"
 	clabexec "github.com/srl-labs/containerlab/exec"
+	clablinks "github.com/srl-labs/containerlab/links"
 	clabnodes "github.com/srl-labs/containerlab/nodes"
 	clabruntime "github.com/srl-labs/containerlab/runtime"
 	clabtypes "github.com/srl-labs/containerlab/types"
+	clabutils "github.com/srl-labs/containerlab/utils"
+	"github.com/vishvananda/netns"
 )
 
 type imageBuildTarget struct {
@@ -371,6 +374,9 @@ func (c *CLab) buildTopologyImageTarget(ctx context.Context, target *imageBuildT
 	if execResult.GetReturnCode() != 0 {
 		return fmt.Errorf("topology builder command failed: %s", execResult)
 	}
+	if err := parkTopologyBuilderLinks(ctx, node); err != nil {
+		return fmt.Errorf("park topology builder links: %w", err)
+	}
 	if err := node.GetRuntime().StopContainer(ctx, cfg.LongName, clabtypes.SIGKILL); err != nil {
 		return fmt.Errorf("stop topology builder: %w", err)
 	}
@@ -381,9 +387,6 @@ func (c *CLab) buildTopologyImageTarget(ctx context.Context, target *imageBuildT
 	containerName := node.Config().LongName
 	if err := node.GetRuntime().CommitContainer(ctx, containerName, target.Image, build.Commit); err != nil {
 		return fmt.Errorf("commit topology builder: %w", err)
-	}
-	if err := removeNodeLinks(ctx, node); err != nil {
-		return fmt.Errorf("remove topology builder links: %w", err)
 	}
 	if err := node.GetRuntime().DeleteContainer(ctx, containerName); err != nil {
 		return fmt.Errorf("delete topology builder container: %w", err)
@@ -408,21 +411,88 @@ func waitForContainerStopped(ctx context.Context, node clabnodes.Node) error {
 	}
 }
 
-func removeNodeLinks(ctx context.Context, node clabnodes.Node) error {
-	seen := map[string]struct{}{}
+func topologyImageParkingNetNSName(node clabnodes.Node) string {
+	return clabutils.ParkingNetnsName(node.Config().LongName)
+}
+
+func topologyImageParkingNode(node clabnodes.Node, create bool) (*clablinks.ParkingNode, error) {
+	var (
+		path string
+		err  error
+	)
+	if create {
+		path, err = clabutils.CreateOrGetNamedNetNS(topologyImageParkingNetNSName(node))
+	} else {
+		path, err = clabutils.GetNamedNetNS(topologyImageParkingNetNSName(node))
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return clablinks.NewParkingNode(node.Config().LongName, path), nil
+}
+
+func parkTopologyBuilderLinks(ctx context.Context, node clabnodes.Node) error {
+	parkingNode, err := topologyImageParkingNode(node, true)
+	if err != nil {
+		return err
+	}
+
+	moved := make([]clablinks.Endpoint, 0, len(node.GetEndpoints()))
 	for _, ep := range node.GetEndpoints() {
 		link := ep.GetLink()
 		if link == nil {
 			continue
 		}
-		key := fmt.Sprintf("%p", link)
-		if _, ok := seen[key]; ok {
-			continue
+		if link.GetType() != clablinks.LinkTypeVEth {
+			for i := len(moved) - 1; i >= 0; i-- {
+				_ = clablinks.RestoreParkedEndpointInterface(ctx, parkingNode, moved[i])
+			}
+			_ = netns.DeleteNamed(topologyImageParkingNetNSName(node))
+			return fmt.Errorf(
+				"node %q endpoint %q is linked via %q, but topology image parking supports only veth links",
+				node.Config().ShortName,
+				ep.GetIfaceName(),
+				link.GetType(),
+			)
 		}
-		seen[key] = struct{}{}
-		if err := link.Remove(ctx); err != nil {
+
+		if err := clablinks.ParkEndpointInterface(ctx, ep, parkingNode); err != nil {
+			for i := len(moved) - 1; i >= 0; i-- {
+				_ = clablinks.RestoreParkedEndpointInterface(ctx, parkingNode, moved[i])
+			}
+			_ = netns.DeleteNamed(topologyImageParkingNetNSName(node))
 			return err
 		}
+		moved = append(moved, ep)
 	}
+
+	return nil
+}
+
+func restoreTopologyBuilderLinks(ctx context.Context, node clabnodes.Node) error {
+	parkingNode, err := topologyImageParkingNode(node, false)
+	if err != nil {
+		return nil
+	}
+
+	restored := make([]clablinks.Endpoint, 0, len(node.GetEndpoints()))
+	for _, ep := range node.GetEndpoints() {
+		if ep.GetLink() == nil || ep.GetLink().GetType() != clablinks.LinkTypeVEth {
+			continue
+		}
+		if err := clablinks.RestoreParkedEndpointInterface(ctx, parkingNode, ep); err != nil {
+			for i := len(restored) - 1; i >= 0; i-- {
+				_ = clablinks.ParkEndpointInterface(ctx, restored[i], parkingNode)
+			}
+			return err
+		}
+		restored = append(restored, ep)
+	}
+
+	if err := netns.DeleteNamed(topologyImageParkingNetNSName(node)); err != nil {
+		return fmt.Errorf("cleanup topology image parking netns: %w", err)
+	}
+
 	return nil
 }

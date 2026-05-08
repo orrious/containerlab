@@ -405,6 +405,13 @@ func (c *CLab) scheduleNodeWorkerF( //nolint: funlen
 
 			node.EnterStage(ctx, clabtypes.WaitForCreateLinks)
 
+			err = restoreTopologyBuilderLinks(ctx, node)
+			if err != nil {
+				log.Errorf("failed to restore topology image links for node %q: %v", node.Config().ShortName, err)
+				nodeFailCh <- fmt.Errorf("node %q restore topology image links: %w", node.Config().ShortName, err)
+				continue
+			}
+
 			// Deploy the Nodes link endpoints
 			err = node.DeployEndpoints(ctx)
 			if err != nil {
