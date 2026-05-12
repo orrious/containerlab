@@ -79,6 +79,8 @@ func (r *PodmanRuntime) createContainerSpec(
 		log.Errorf("Cannot convert mounts %v: %v", cfg.Binds, err)
 		mounts = nil
 	}
+	tmpfsMounts := r.convertTmpfsMounts(cfg.Tmpfs)
+	mounts = append(mounts, tmpfsMounts...)
 	specStorageConfig := specgen.ContainerStorageConfig{
 		Image: cfg.Image,
 		// Rootfs:            "",
@@ -99,14 +101,25 @@ func (r *PodmanRuntime) createContainerSpec(
 		// Secrets:           nil,
 		// Volatile:          false,
 	}
+	if cfg.ShmSize != "" {
+		shmSize, err := humanize.ParseBytes(cfg.ShmSize)
+		if err != nil {
+			return sg, fmt.Errorf("failed to parse shm-size %q for container %q: %w", cfg.ShmSize, cfg.LongName, err)
+		}
+		shmSizeInt := int64(shmSize)
+		specStorageConfig.ShmSize = &shmSizeInt
+	}
 	// Security
 	specSecurityConfig := specgen.ContainerSecurityConfig{
 		Privileged: utils.Pointer(true),
 		User:       cfg.User,
 	}
-	// Going with the defaults for cgroups
+	cgroupNS, err := specgen.ParseNamespace(cfg.CgroupnsMode)
+	if err != nil {
+		return sg, err
+	}
 	specCgroupConfig := specgen.ContainerCgroupConfig{
-		CgroupNS: specgen.Namespace{},
+		CgroupNS: cgroupNS,
 	}
 	// Resource limits
 	var (
@@ -320,6 +333,27 @@ func (*PodmanRuntime) convertMounts(_ context.Context, mounts []string) ([]specs
 		mntSpec,
 	)
 	return mntSpec, nil
+}
+
+// convertTmpfsMounts converts topology tmpfs entries into OCI tmpfs mounts.
+func (*PodmanRuntime) convertTmpfsMounts(tmpfs map[string]string) []specs.Mount {
+	if len(tmpfs) == 0 {
+		return nil
+	}
+
+	mounts := make([]specs.Mount, 0, len(tmpfs))
+	for dest, opts := range tmpfs {
+		mount := specs.Mount{
+			Destination: dest,
+			Type:        "tmpfs",
+			Source:      "tmpfs",
+		}
+		if opts != "" {
+			mount.Options = strings.Split(opts, ",")
+		}
+		mounts = append(mounts, mount)
+	}
+	return mounts
 }
 
 // produceGenericContainerList takes a list of containers in a podman entities.ListContainer format
