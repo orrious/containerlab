@@ -1358,7 +1358,7 @@ func TestGetNodeRuntimeOptions(t *testing.T) {
 func TestGetNodePrivilegedDefault(t *testing.T) {
 	topo := &Topology{
 		Nodes: map[string]*NodeDefinition{
-			"node1": {},
+			"node1": {Kind: "linux"},
 		},
 	}
 
