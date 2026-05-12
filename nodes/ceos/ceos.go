@@ -8,7 +8,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -343,16 +342,10 @@ func setMgmtInterface(node *clabtypes.NodeConfig) error {
 }
 
 // ceosPostDeploy runs postdeploy actions which are required for ceos nodes.
-func (n *ceos) ceosPostDeploy(_ context.Context) error {
+func (n *ceos) ceosPostDeploy(ctx context.Context) error {
 	nodeCfg := n.Config()
-	d, err := clabutils.SpawnCLIviaExec("arista_eos", nodeCfg.LongName, n.Runtime.GetName())
-	if err != nil {
-		return err
-	}
-
-	defer d.Close()
-
 	cfgs := []string{
+		"configure terminal",
 		"interface " + nodeCfg.MgmtIntf,
 		"no ip address",
 		"no ipv6 address",
@@ -406,18 +399,27 @@ func (n *ceos) ceosPostDeploy(_ context.Context) error {
 	}
 
 	// add save to startup cmd
-	cfgs = append(cfgs, "wr")
+	cfgs = append(cfgs, "end", "write memory")
 
 	log.Debugf("cEOS PostDeploy configuration for node %s: %v", n.Cfg.ShortName, cfgs)
 
-	resp, err := d.SendConfigs(cfgs)
+	execCmd := clabexec.NewExecCmdFromSlice(
+		[]string{"Cli", "-p", "15", "--abort-on-error", "-c", strings.Join(cfgs, "\n")},
+	)
+	resp, err := n.RunExec(ctx, execCmd)
 	if err != nil {
 		return err
-	} else if resp.Failed != nil {
-		return errors.New("failed CLI configuration")
+	}
+	if resp.GetReturnCode() != 0 {
+		return fmt.Errorf(
+			"failed CLI configuration: rc=%d stdout=%q stderr=%q",
+			resp.GetReturnCode(),
+			resp.GetStdOutString(),
+			resp.GetStdErrString(),
+		)
 	}
 
-	return err
+	return nil
 }
 
 // CheckInterfaceName checks if a name of the interface referenced in the topology file correct.
