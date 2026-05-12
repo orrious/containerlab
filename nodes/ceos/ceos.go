@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	clabconstants "github.com/srl-labs/containerlab/constants"
@@ -403,23 +404,36 @@ func (n *ceos) ceosPostDeploy(ctx context.Context) error {
 
 	log.Debugf("cEOS PostDeploy configuration for node %s: %v", n.Cfg.ShortName, cfgs)
 
-	execCmd := clabexec.NewExecCmdFromSlice(
-		[]string{"/usr/bin/Cli", "-p", "15", "--abort-on-error", "-c", strings.Join(cfgs, "\n")},
-	)
-	resp, err := n.RunExec(ctx, execCmd)
-	if err != nil {
-		return err
+	var lastErr error
+	var lastResp *clabexec.ExecResult
+	cliCmd := "Cli -p 15 --abort-on-error -c $'" + strings.Join(cfgs, "\n") + "'"
+
+	for range 60 {
+		execCmd := clabexec.NewExecCmdFromSlice([]string{"/bin/bash", "-lc", cliCmd})
+		resp, err := n.RunExec(ctx, execCmd)
+		if err == nil && resp.GetReturnCode() == 0 {
+			return nil
+		}
+
+		lastErr = err
+		lastResp = resp
+		log.Debugf("%s - Cli not ready (%v, %v) - waiting.", nodeCfg.LongName, err, resp)
+		time.Sleep(2 * time.Second)
 	}
-	if resp.GetReturnCode() != 0 {
+
+	if lastErr != nil {
+		return lastErr
+	}
+	if lastResp != nil {
 		return fmt.Errorf(
 			"failed CLI configuration: rc=%d stdout=%q stderr=%q",
-			resp.GetReturnCode(),
-			resp.GetStdOutString(),
-			resp.GetStdErrString(),
+			lastResp.GetReturnCode(),
+			lastResp.GetStdOutString(),
+			lastResp.GetStdErrString(),
 		)
 	}
 
-	return nil
+	return fmt.Errorf("failed CLI configuration")
 }
 
 // CheckInterfaceName checks if a name of the interface referenced in the topology file correct.
