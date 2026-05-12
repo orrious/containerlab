@@ -404,7 +404,7 @@ func (n *ceos) ceosPostDeploy(ctx context.Context) error {
 	log.Debugf("cEOS PostDeploy configuration for node %s: %v", n.Cfg.ShortName, cfgs)
 
 	execCmd := clabexec.NewExecCmdFromSlice(
-		[]string{"Cli", "-p", "15", "--abort-on-error", "-c", strings.Join(cfgs, "\n")},
+		[]string{"/usr/bin/Cli", "-p", "15", "--abort-on-error", "-c", strings.Join(cfgs, "\n")},
 	)
 	resp, err := n.RunExec(ctx, execCmd)
 	if err != nil {
