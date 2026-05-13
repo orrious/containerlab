@@ -23,6 +23,10 @@ env:
   PY_VER: "3.10"
   RUNTIME: ${{ inputs.runtime || 'docker' }}
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   process-gitref:
     runs-on: ubuntu-24.04
