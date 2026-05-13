@@ -221,72 +221,10 @@ jobs:
           path: /tmp/clab-tests/coverage/*
           retention-days: 7
 
-  ceos-basic-tests:
-    runs-on: ubuntu-24.04
-    needs:
-      - build-containerlab
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: actions/download-artifact@v7
-        with:
-          name: containerlab
-      - name: Move containerlab to usr/bin
-        run: sudo mv ./containerlab /usr/bin/containerlab && sudo chown root:root /usr/bin/containerlab && sudo chmod 4755 /usr/bin/containerlab
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          # Install a specific version of uv.
-          version: "0.5.28"
-          enable-cache: true
-
-      - uses: actions/setup-python@v6
-        with:
-          # cache: pip
-          # cache-dependency-path: "tests/requirements.txt"
-          python-version-file: "pyproject.toml"
-
-      - name: Install the project
-        run: uv sync --all-extras --dev
-
-      # - name: setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
-
-      - name: Activate virtualenv
-        run: |
-          . .venv/bin/activate
-          echo PATH=$PATH >> $GITHUB_ENV
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull ceos image
-        run: docker pull ghcr.io/srl-labs/ceos:4.32.0F && docker tag ghcr.io/srl-labs/ceos:4.32.0F ceos:4.32.0F
-      - name: Run ceos tests
-        run: |
-          bash ./tests/rf-run.sh docker ./tests/03-basic-ceos
-      # upload test reports as a zip file
-      - uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: 03-basic-ceos-log-docker
-          path: ./tests/out/*.html
-
-      # upload coverage report from unit tests, as they are then
-      # merged with e2e tests coverage
-      - name: Upload coverage
-        uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: coverage-ceos-tests-docker
-          path: /tmp/clab-tests/coverage/*
-          retention-days: 7
+  # Disabled for the fork release path: this job pulls licensed cEOS images that
+  # are not available to public/fork CI runners.
+  # ceos-basic-tests:
+  #   runs-on: ubuntu-24.04
 
   srlinux-basic-tests:
     uses: ./.github/workflows/srlinux-tests.yml
@@ -384,34 +322,14 @@ jobs:
   #   with:
   #     py_ver: ${{ needs.process-gitref.outputs.py_ver }}
 
-  srsim-tests:
-    uses: ./.github/workflows/srsim-tests.yml
-    secrets: inherit
-    needs:
-      - file-changes
-      - build-containerlab
-    with:
-      py_ver: ${{ needs.process-gitref.outputs.py_ver }}
-
-  fortigate-tests:
-    uses: ./.github/workflows/fortigate-tests.yml
-    needs:
-      - file-changes
-      - build-containerlab
-      - process-gitref
-    with:
-      py_ver: ${{ needs.process-gitref.outputs.py_ver }}
-      runtime: ${{ needs.process-gitref.outputs.runtime }}
-
-  cisco_iol-tests:
-    uses: ./.github/workflows/cisco_iol-tests.yml
-    needs:
-      - file-changes
-      - build-containerlab
-      - process-gitref
-    with:
-      py_ver: ${{ needs.process-gitref.outputs.py_ver }}
-      runtime: ${{ needs.process-gitref.outputs.runtime }}
+  # Disabled for the fork release path: these suites require licensed images or
+  # license secrets that are not available to public/fork CI runners.
+  # srsim-tests:
+  #   uses: ./.github/workflows/srsim-tests.yml
+  # fortigate-tests:
+  #   uses: ./.github/workflows/fortigate-tests.yml
+  # cisco_iol-tests:
+  #   uses: ./.github/workflows/cisco_iol-tests.yml
 
   fdio_vpp-tests:
     uses: ./.github/workflows/fdio_vpp-tests.yml
@@ -440,14 +358,10 @@ jobs:
       - unit-test
       - smoke-tests
       - ext-container-tests
-      - ceos-basic-tests
       - srlinux-basic-tests
       - ixiac-one-basic-tests
       - vxlan-tests
       - kind-tests
-      - srsim-tests
-      - fortigate-tests
-      - cisco_iol-tests
       - fdio_vpp-tests
 
     steps:
@@ -518,15 +432,11 @@ jobs:
       # - docs-test
       - unit-test
       - smoke-tests
-      - ceos-basic-tests
       - srlinux-basic-tests
       - ixiac-one-basic-tests
       - ext-container-tests
       - vxlan-tests
       - kind-tests
-      - srsim-tests
-      - cisco_iol-tests
-      - fortigate-tests
       - fdio_vpp-tests
     steps:
       - name: Checkout
