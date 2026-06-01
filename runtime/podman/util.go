@@ -47,6 +47,7 @@ func (r *PodmanRuntime) createContainerSpec(
 	cfg *types.NodeConfig,
 ) (specgen.SpecGenerator, error) {
 	sg := specgen.SpecGenerator{}
+	var err error
 	var cmd []string
 	if strings.TrimSpace(cfg.Cmd) != "" {
 		cmd, err = shlex.Split(cfg.Cmd)
