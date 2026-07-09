@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -318,6 +319,15 @@ func (r *PodmanRuntime) GetNSPath(ctx context.Context, cID string) (string, erro
 	inspect, err := containers.Inspect(ctx, cID, &containers.InspectOptions{})
 	if err != nil {
 		return "", err
+	}
+	// A running container's PID namespace path is visible from the host even when
+	// rootless Podman's named sandbox mount lives in Podman's private mount namespace.
+	if inspect.State != nil && inspect.State.Pid > 0 {
+		nspath := filepath.Join("/proc", strconv.Itoa(inspect.State.Pid), "ns/net")
+		if utils.FileOrDirExists(nspath) {
+			log.Debugf("Method GetNSPath resolved running container namespace %q", nspath)
+			return nspath, nil
+		}
 	}
 	// Prefer podman's reported sandbox key when it exists, but fall back to /run/netns/<name>
 	// to support stopped containers and containerlab-managed netns links.

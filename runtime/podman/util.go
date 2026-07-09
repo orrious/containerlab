@@ -424,12 +424,20 @@ func (*PodmanRuntime) extractMgmtIP(
 }
 
 func (r *PodmanRuntime) disableTXOffload(_ context.Context) error {
+	socket, err := r.GetRuntimeSocket()
+	if err != nil {
+		return err
+	}
+	if socket != "/run/podman/podman.sock" {
+		log.Debugf("Skipping host TX offload change for rootless Podman network interface %q", r.mgmt.Bridge)
+		return nil
+	}
 	// TX checksum disabling will be done here since the mgmt bridge
 	// may not exist in netlink before a container is attached to it
 	brName := r.mgmt.Bridge
 	log.Debugf("Got a bridge name %q", brName)
 	// Disable checksum calculation hw offload
-	err := utils.EthtoolTXOff(brName)
+	err = utils.EthtoolTXOff(brName)
 	if err != nil {
 		log.Warnf("failed to disable TX checksum offload for interface %q: %v", brName, err)
 		return nil
