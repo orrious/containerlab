@@ -852,6 +852,8 @@ Containerlab's built-in Dependency Manger takes care of all the dependencies, bo
 
 Note, that `wait-for` is a list, a node's stage may depend on several other nodes' stages.
 
+The same dependencies are honored by `containerlab start`. Prerequisites are started first, and a dependency on the `healthy` stage waits for the prerequisite to report healthy before the dependent node starts.
+
 /// admonition | Usage scenarios
     type: tip
 One of the use cases where `wait-for` might be crucial is when a number of VM-based nodes are deployed. Typically, simultaneous deployment of VMs might lead to shortage of CPU resources and VMs might fail to boot. In such cases, `wait-for` can be used to define the order of VM deployment, thus ensuring that certain VMs enter their `create` stage after certain nodes have reached `healthy` status.

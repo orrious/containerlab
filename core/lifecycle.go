@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	claberrors "github.com/srl-labs/containerlab/errors"
 	clabnodes "github.com/srl-labs/containerlab/nodes"
 	clabruntime "github.com/srl-labs/containerlab/runtime"
+	clabtypes "github.com/srl-labs/containerlab/types"
 )
 
 // lifecycleNodes resolves the requested node names without applying lifecycle policy.
@@ -37,6 +39,148 @@ func (c *CLab) lifecycleNodes(nodeNames []string) ([]clabnodes.Node, error) {
 	}
 
 	return nodes, nil
+}
+
+func (c *CLab) lifecycleStartNodes(
+	nodeNames []string,
+) ([]clabnodes.Node, map[string]clabtypes.WaitForList, error) {
+	selected := map[string]struct{}{}
+	deps := map[string]clabtypes.WaitForList{}
+
+	var addWithDependencies func(string) error
+	addWithDependencies = func(name string) error {
+		node, ok := c.Nodes[name]
+		if !ok {
+			return fmt.Errorf("%w: node %q is not present in the topology", claberrors.ErrIncorrectInput, name)
+		}
+		if _, exists := selected[name]; exists {
+			return nil
+		}
+		selected[name] = struct{}{}
+
+		for _, dep := range c.lifecycleDependencies(node) {
+			if _, ok := c.Nodes[dep.Node]; !ok {
+				return fmt.Errorf("dependee node %q not found", dep.Node)
+			}
+			deps[name] = append(deps[name], dep)
+			if err := addWithDependencies(dep.Node); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if len(nodeNames) == 0 {
+		nodeNames = make([]string, 0, len(c.Nodes))
+		for name := range c.Nodes {
+			nodeNames = append(nodeNames, name)
+		}
+		slices.Sort(nodeNames)
+	}
+	for _, name := range nodeNames {
+		if err := addWithDependencies(name); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	orderedNames, err := lifecycleToposort(selected, deps)
+	if err != nil {
+		return nil, nil, err
+	}
+	nodes := make([]clabnodes.Node, 0, len(orderedNames))
+	for _, name := range orderedNames {
+		nodes = append(nodes, c.Nodes[name])
+	}
+	return nodes, deps, nil
+}
+
+func (c *CLab) lifecycleDependencies(node clabnodes.Node) clabtypes.WaitForList {
+	var deps clabtypes.WaitForList
+	if stages := node.Config().Stages; stages != nil {
+		for _, waitForNodes := range stages.GetWaitFor() {
+			deps = append(deps, waitForNodes...)
+		}
+	}
+
+	netMode := strings.SplitN(node.Config().NetworkMode, ":", 2) //nolint:mnd
+	if len(netMode) == 2 && netMode[0] == "container" {
+		if _, exists := c.Nodes[netMode[1]]; exists {
+			deps = append(deps, &clabtypes.WaitFor{Node: netMode[1], Stage: clabtypes.WaitForCreate})
+		}
+	}
+	return deps
+}
+
+func lifecycleToposort(
+	selected map[string]struct{},
+	deps map[string]clabtypes.WaitForList,
+) ([]string, error) {
+	ordered := make([]string, 0, len(selected))
+	visiting := map[string]bool{}
+	visited := map[string]bool{}
+
+	var visit func(string) error
+	visit = func(name string) error {
+		if visited[name] {
+			return nil
+		}
+		if visiting[name] {
+			return fmt.Errorf("cyclic lifecycle dependencies found at node %q", name)
+		}
+		visiting[name] = true
+		for _, dep := range deps[name] {
+			if _, ok := selected[dep.Node]; ok {
+				if err := visit(dep.Node); err != nil {
+					return err
+				}
+			}
+		}
+		visiting[name] = false
+		visited[name] = true
+		ordered = append(ordered, name)
+		return nil
+	}
+
+	names := make([]string, 0, len(selected))
+	for name := range selected {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		if err := visit(name); err != nil {
+			return nil, err
+		}
+	}
+	return ordered, nil
+}
+
+func (c *CLab) waitForLifecycleNodeHealthy(ctx context.Context, nodeName, depName string) error {
+	dep, ok := c.Nodes[depName]
+	if !ok {
+		return fmt.Errorf("dependee node %q not found", depName)
+	}
+
+	var deadline time.Time
+	if c.timeout > 0 {
+		deadline = time.Now().Add(c.timeout)
+	}
+	for {
+		healthy, err := dep.IsHealthy(ctx)
+		if err != nil {
+			return fmt.Errorf("node %q waiting for node %q healthy stage: %w", nodeName, depName, err)
+		}
+		if healthy {
+			return nil
+		}
+		if !deadline.IsZero() && time.Now().After(deadline) {
+			return fmt.Errorf("node %q timed out waiting for node %q healthy stage", nodeName, depName)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 func (c *CLab) parkRecreatedNodes(ctx context.Context, plan *applyPlan) error {
