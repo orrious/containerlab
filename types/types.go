@@ -168,6 +168,12 @@ type NodeConfig struct {
 	Devices []string `json:"devices,omitempty"`
 	// Capabilities required by the container (if not run in privileged mode)
 	CapAdd []string `json:"cap-add,omitempty"`
+	// Run the container in privileged mode.
+	Privileged bool `json:"privileged,omitempty"`
+	// Cgroup namespace mode for the container.
+	CgroupnsMode string `json:"cgroupns-mode,omitempty"`
+	// Security options to apply to the container runtime.
+	SecurityOpts []string `json:"security-opts,omitempty"`
 	// Size of the shared memory allocated to the container
 	ShmSize string `json:"shm-size,omitempty"`
 	// PortBindings define the bindings between the container ports and host ports
