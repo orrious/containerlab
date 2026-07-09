@@ -38,8 +38,12 @@ func (*podmanWriterCloser) Close() error {
 	return nil
 }
 
-func (*PodmanRuntime) connect(ctx context.Context) (context.Context, error) {
-	return bindings.NewConnection(ctx, "unix://run/podman/podman.sock")
+func (r *PodmanRuntime) connect(ctx context.Context) (context.Context, error) {
+	socket, err := r.GetRuntimeSocket()
+	if err != nil {
+		return nil, err
+	}
+	return bindings.NewConnection(ctx, "unix://"+socket)
 }
 
 func (r *PodmanRuntime) createContainerSpec(

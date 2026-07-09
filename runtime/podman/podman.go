@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -118,6 +117,9 @@ func (r *PodmanRuntime) CreateNet(ctx context.Context) error {
 		details, err := network.Inspect(ctx, r.mgmt.Network, &network.InspectOptions{})
 		if err != nil {
 			return err
+		}
+		if details.NetworkInterface == "" {
+			return fmt.Errorf("podman network %q did not report a netavark network interface", r.mgmt.Network)
 		}
 		r.mgmt.Bridge = details.NetworkInterface
 	}
@@ -543,20 +545,22 @@ func (r *PodmanRuntime) CheckConnection(ctx context.Context) error {
 }
 
 func (r *PodmanRuntime) GetRuntimeSocket() (string, error) {
-	socket := "/run/podman/podman.sock"
+	return selectPodmanSocket(os.Getenv("XDG_RUNTIME_DIR"), func(path string) bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}), nil
+}
 
-	// For rootless podman, check if XDG_RUNTIME_DIR is set
-	if os.Getenv("XDG_RUNTIME_DIR") != "" {
-		userID := os.Getenv("UID")
-		if userID == "" {
-			userID = strconv.Itoa(os.Getuid())
-		}
-		nonRootSocket := fmt.Sprintf("/run/user/%s/podman/podman.sock", userID)
-		if _, err := os.Stat(nonRootSocket); err == nil {
-			socket = nonRootSocket
-		}
+func selectPodmanSocket(xdgRuntimeDir string, exists func(string) bool) string {
+	const rootfulSocket = "/run/podman/podman.sock"
+	if xdgRuntimeDir == "" {
+		return rootfulSocket
 	}
-	return socket, nil
+	rootlessSocket := filepath.Join(xdgRuntimeDir, "podman", "podman.sock")
+	if exists(rootlessSocket) {
+		return rootlessSocket
+	}
+	return rootfulSocket
 }
 
 func (*PodmanRuntime) StreamLogs(ctx context.Context, containerName string) (io.ReadCloser, error) {
