@@ -37,6 +37,15 @@ func NewEndpointRaw(node, nodeIf, mac string) *EndpointRaw {
 func (er *EndpointRaw) Resolve(params *ResolveParams, l Link) (Endpoint, error) {
 	// check if the referenced node does exist
 	node, exists := params.Nodes[er.Node]
+	if !exists && params.ResolveFilteredNode != nil {
+		var err error
+		node, err = params.ResolveFilteredNode(er.Node)
+		if err != nil {
+			return nil, err
+		}
+		params.Nodes[er.Node] = node
+		exists = true
+	}
 	if !exists {
 		return nil, fmt.Errorf("unable to find node %s", er.Node)
 	}
@@ -100,6 +109,9 @@ func (er *EndpointRaw) Resolve(params *ResolveParams, l Link) (Endpoint, error) 
 
 	case LinkEndpointTypeVeth:
 		e = NewEndpointVeth(genericEndpoint)
+
+	case LinkEndpointTypeExisting:
+		e = NewExistingContainerEndpoint(genericEndpoint)
 	}
 	if l.GetType() == LinkTypeDummy {
 		e = NewEndpointDummy(genericEndpoint)

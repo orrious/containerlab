@@ -202,6 +202,40 @@ func TestLinkVEthRaw_Resolve(t *testing.T) {
 	}
 }
 
+func TestLinkVEthRawResolveWithFilteredExistingPeer(t *testing.T) {
+	selected := newFakeNode("node1")
+	existing := newFakeNode("node2")
+	resolvedPeer := false
+	raw := &LinkVEthRaw{Endpoints: []*EndpointRaw{
+		NewEndpointRaw("node1", "eth1", ""),
+		NewEndpointRaw("node2", "eth2", ""),
+	}}
+
+	link, err := raw.Resolve(&ResolveParams{
+		Nodes:       map[string]Node{"node1": selected},
+		NodesFilter: []string{"node1"},
+		ResolveFilteredNode: func(name string) (Node, error) {
+			if name != "node2" {
+				t.Fatalf("resolved unexpected filtered node %q", name)
+			}
+			resolvedPeer = true
+			return existing, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if link == nil {
+		t.Fatal("selected-to-existing link was filtered out")
+	}
+	if !resolvedPeer {
+		t.Fatal("existing peer was not resolved")
+	}
+	if got := link.GetEndpoints()[1].GetNode(); got != existing {
+		t.Fatalf("peer endpoint node = %v, want existing node", got)
+	}
+}
+
 func TestLinkVEthRaw_InvalidEndpointVarAFParsing(t *testing.T) {
 	fn1 := newFakeNode("node1")
 	fn2 := newFakeNode("node2")

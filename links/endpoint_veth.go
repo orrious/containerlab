@@ -4,6 +4,14 @@ import "context"
 
 type EndpointVeth struct {
 	EndpointGeneric
+	nodeless bool
+}
+
+func NewExistingContainerEndpoint(eg *EndpointGeneric) *EndpointVeth {
+	return &EndpointVeth{
+		EndpointGeneric: *eg,
+		nodeless:        true,
+	}
 }
 
 func NewEndpointVeth(eg *EndpointGeneric) *EndpointVeth {
@@ -22,5 +30,5 @@ func (e *EndpointVeth) Deploy(ctx context.Context) error {
 }
 
 func (e *EndpointVeth) IsNodeless() bool {
-	return false
+	return e.nodeless
 }

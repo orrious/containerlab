@@ -15,6 +15,25 @@ type GenericLinkNode struct {
 	nspath    string
 }
 
+// ExistingContainerLinkNode represents an already-running container that is
+// only present as the peer of a node-filtered link.
+type ExistingContainerLinkNode struct {
+	GenericLinkNode
+}
+
+func NewExistingContainerLinkNode(shortname, nspath string) *ExistingContainerLinkNode {
+	return &ExistingContainerLinkNode{
+		GenericLinkNode: GenericLinkNode{
+			shortname: shortname,
+			nspath:    nspath,
+		},
+	}
+}
+
+func (*ExistingContainerLinkNode) GetLinkEndpointType() LinkEndpointType {
+	return LinkEndpointTypeExisting
+}
+
 func (g *GenericLinkNode) AddLinkToContainer(
 	_ context.Context,
 	link netlink.Link,

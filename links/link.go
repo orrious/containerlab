@@ -490,6 +490,7 @@ type LinkEndpointType string
 
 const (
 	LinkEndpointTypeVeth     = "veth"
+	LinkEndpointTypeExisting = "existing-container"
 	LinkEndpointTypeBridge   = "bridge"
 	LinkEndpointTypeBridgeNS = "bridge-ns"
 	LinkEndpointTypeHost     = "host"
@@ -587,6 +588,10 @@ type ResolveParams struct {
 	// list of node shortnames that user
 	// passed as a node filter
 	NodesFilter []string
+	// ResolveFilteredNode resolves an endpoint whose node was excluded by a
+	// node filter. This lets a selected node attach to an already-running peer
+	// without scheduling that peer for deployment again.
+	ResolveFilteredNode func(string) (Node, error)
 	// for the tools command we need to overwrite the
 	// veth interface name on the host side. So this can
 	// be set and will thereby overwrite the general interface
@@ -615,12 +620,12 @@ func isInFilter(params *ResolveParams, endpoints []*EndpointRaw) bool {
 	}
 
 	for _, e := range endpoints {
-		if !clabinternalslices.Contains(params.NodesFilter, e.Node) {
-			return false
+		if clabinternalslices.Contains(params.NodesFilter, e.Node) {
+			return true
 		}
 	}
 
-	return true
+	return false
 }
 
 // SanitizeInterfaceName sanitizes the interface name by replacing '/' and ' ' with '-'.

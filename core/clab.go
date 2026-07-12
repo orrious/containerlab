@@ -622,6 +622,19 @@ func (c *CLab) ResolveLinks() error {
 		Nodes:          c.getLinkNodes(),
 		MgmtBridgeName: c.Config.Mgmt.Bridge,
 		NodesFilter:    c.nodeFilter,
+		ResolveFilteredNode: func(nodeName string) (clablinks.Node, error) {
+			containerName := fmt.Sprintf("%s-%s-%s", *c.Config.Prefix, c.Config.Name, nodeName)
+			nspath, err := c.globalRuntime().GetNSPath(context.Background(), containerName)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"node-filtered link peer %q is not an existing container: %w",
+					nodeName,
+					err,
+				)
+			}
+
+			return clablinks.NewExistingContainerLinkNode(nodeName, nspath), nil
+		},
 	}
 
 	for i, l := range c.Config.Topology.Links {
