@@ -612,6 +612,13 @@ func (c *CLab) verifyContainersUniqueness(ctx context.Context) error {
 		)
 	}
 
+	// A node-filtered deploy intentionally adds nodes to an existing lab. The
+	// long-name check above still protects every selected node from collision,
+	// while the whole-lab label check below applies only to full deployments.
+	if len(c.nodeFilter) != 0 {
+		return nil
+	}
+
 	// check that none of the existing containers has a label that matches
 	// the lab name of a currently deploying lab
 	// this ensures lab uniqueness

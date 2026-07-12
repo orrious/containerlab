@@ -527,8 +527,9 @@ func TestVerifyContainersUniqueness(t *testing.T) {
 			c []clabruntime.GenericContainer
 			e error
 		}
-		topo      string
-		wantError bool
+		topo       string
+		nodeFilter []string
+		wantError  bool
 	}{
 		"no dups": {
 			mockResult: struct {
@@ -590,6 +591,40 @@ func TestVerifyContainersUniqueness(t *testing.T) {
 			wantError: false,
 			topo:      "test_data/topo11-ext-cont.yaml",
 		},
+		"node filter permits unrelated containers from same lab": {
+			mockResult: struct {
+				c []clabruntime.GenericContainer
+				e error
+			}{
+				c: []clabruntime.GenericContainer{
+					{
+						Names:  []string{"clab-topo1-node2"},
+						Labels: map[string]string{clabconstants.Containerlab: "topo1"},
+					},
+				},
+				e: nil,
+			},
+			topo:       "test_data/topo1.yml",
+			nodeFilter: []string{"node1"},
+			wantError:  false,
+		},
+		"node filter rejects selected container duplicate": {
+			mockResult: struct {
+				c []clabruntime.GenericContainer
+				e error
+			}{
+				c: []clabruntime.GenericContainer{
+					{
+						Names:  []string{"clab-topo1-node1"},
+						Labels: map[string]string{clabconstants.Containerlab: "topo1"},
+					},
+				},
+				e: nil,
+			},
+			topo:       "test_data/topo1.yml",
+			nodeFilter: []string{"node1"},
+			wantError:  true,
+		},
 	}
 
 	for name, tc := range tests {
@@ -598,8 +633,9 @@ func TestVerifyContainersUniqueness(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			rtName := "mock"
 
-			opts := []ClabOption{
-				WithTopoPath(tc.topo, nil),
+			opts := []ClabOption{WithTopoPath(tc.topo, nil)}
+			if len(tc.nodeFilter) != 0 {
+				opts = append(opts, WithNodeFilter(tc.nodeFilter))
 			}
 
 			c, err := NewContainerLab(opts...)
