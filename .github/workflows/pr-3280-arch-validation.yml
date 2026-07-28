@@ -1,6 +1,9 @@
 name: pr-3280-arch-validation
 
 on:
+  push:
+    branches:
+      - tmp/pr-3280-arch-validation
   workflow_dispatch:
 
 env:
