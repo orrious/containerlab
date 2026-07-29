@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	clablinks "github.com/srl-labs/containerlab/links"
 	clabmocksmocknodes "github.com/srl-labs/containerlab/mocks/mocknodes"
 	clabnodes "github.com/srl-labs/containerlab/nodes"
 	clabtypes "github.com/srl-labs/containerlab/types"
@@ -66,6 +67,38 @@ func TestResolveImageBuildTargetsDedupesIdenticalDefinitions(t *testing.T) {
 	}
 	if targets[0].NodeName != "card-01" {
 		t.Fatalf("expected target bound to card-01, got %q", targets[0].NodeName)
+	}
+}
+
+func TestTopologyImageLinkIsInternal(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	node := clabmocksmocknodes.NewMockNode(ctrl)
+	other := clabmocksmocknodes.NewMockNode(ctrl)
+	node.EXPECT().GetShortName().Return("wic1").AnyTimes()
+	other.EXPECT().GetShortName().Return("btor1").AnyTimes()
+
+	tests := []struct {
+		name   string
+		owners []clablinks.Node
+		want   bool
+	}{
+		{name: "both endpoints belong to builder", owners: []clablinks.Node{node, node}, want: true},
+		{name: "external peer", owners: []clablinks.Node{node, other}},
+		{name: "nodeless peer", owners: []clablinks.Node{node, nil}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			link := clablinks.NewLinkVEth()
+			for i, owner := range tt.owners {
+				ep := clablinks.NewEndpointGeneric(owner, string(rune('a'+i)), link)
+				link.Endpoints = append(link.Endpoints, clablinks.NewEndpointVeth(ep))
+			}
+			if got := topologyImageLinkIsInternal(link, node); got != tt.want {
+				t.Fatalf("topologyImageLinkIsInternal = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

@@ -444,6 +444,15 @@ func parkTopologyBuilderLinks(ctx context.Context, node clabnodes.Node) error {
 		if link == nil {
 			continue
 		}
+		// A veth whose endpoints are both owned by the builder cannot be
+		// moved into another namespace one endpoint at a time: moving the
+		// second endpoint back beside its peer fails with EEXIST. It has no
+		// external peer to preserve, so remove it after parking external
+		// links and let the final node's normal DeployEndpoints pass recreate
+		// it from the topology.
+		if topologyImageLinkIsInternal(link, node) {
+			continue
+		}
 		if link.GetType() != clablinks.LinkTypeVEth {
 			for i := len(moved) - 1; i >= 0; i-- {
 				_ = clablinks.RestoreParkedEndpointInterface(ctx, parkingNode, moved[i])
@@ -462,9 +471,31 @@ func parkTopologyBuilderLinks(ctx context.Context, node clabnodes.Node) error {
 				_ = clablinks.RestoreParkedEndpointInterface(ctx, parkingNode, moved[i])
 			}
 			_ = netns.DeleteNamed(topologyImageParkingNetNSName(node))
-			return err
+			return fmt.Errorf("park endpoint %q: %w", ep.GetIfaceName(), err)
 		}
 		moved = append(moved, ep)
+	}
+
+	removed := make(map[clablinks.Link]clablinks.Endpoint)
+	for _, ep := range node.GetEndpoints() {
+		link := ep.GetLink()
+		if link == nil || !topologyImageLinkIsInternal(link, node) {
+			continue
+		}
+		if _, ok := removed[link]; ok {
+			continue
+		}
+		if err := link.Remove(ctx); err != nil {
+			for removedLink, removedEP := range removed {
+				_ = removedLink.Deploy(ctx, removedEP)
+			}
+			for i := len(moved) - 1; i >= 0; i-- {
+				_ = clablinks.RestoreParkedEndpointInterface(ctx, parkingNode, moved[i])
+			}
+			_ = netns.DeleteNamed(topologyImageParkingNetNSName(node))
+			return fmt.Errorf("remove builder-internal link for endpoint %q: %w", ep.GetIfaceName(), err)
+		}
+		removed[link] = ep
 	}
 
 	return nil
@@ -478,7 +509,9 @@ func restoreTopologyBuilderLinks(ctx context.Context, node clabnodes.Node) error
 
 	restored := make([]clablinks.Endpoint, 0, len(node.GetEndpoints()))
 	for _, ep := range node.GetEndpoints() {
-		if ep.GetLink() == nil || ep.GetLink().GetType() != clablinks.LinkTypeVEth {
+		if ep.GetLink() == nil ||
+			ep.GetLink().GetType() != clablinks.LinkTypeVEth ||
+			topologyImageLinkIsInternal(ep.GetLink(), node) {
 			continue
 		}
 		if err := clablinks.RestoreParkedEndpointInterface(ctx, parkingNode, ep); err != nil {
@@ -495,4 +528,17 @@ func restoreTopologyBuilderLinks(ctx context.Context, node clabnodes.Node) error
 	}
 
 	return nil
+}
+
+func topologyImageLinkIsInternal(link clablinks.Link, node clabnodes.Node) bool {
+	endpoints := link.GetRuntimeEndpoints()
+	if len(endpoints) < 2 {
+		return false
+	}
+	for _, ep := range endpoints {
+		if ep.GetNode() == nil || ep.GetNode().GetShortName() != node.GetShortName() {
+			return false
+		}
+	}
+	return true
 }
