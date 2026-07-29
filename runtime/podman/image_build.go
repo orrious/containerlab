@@ -71,7 +71,7 @@ func applyBuildNetwork(opts *podmantypes.BuildOptions, networkName string) {
 		network.Path = networkName
 		opts.ConfigureNetwork = define.NetworkEnabled
 	}
-	opts.NamespaceOptions.AddOrReplace(network)
+	opts.NamespaceOptions = append(opts.NamespaceOptions, network)
 }
 
 func (r *PodmanRuntime) CommitContainer(

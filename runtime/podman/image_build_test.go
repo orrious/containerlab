@@ -74,7 +74,12 @@ func TestApplyBuildNetwork(t *testing.T) {
 			if opts.ConfigureNetwork != tt.wantPolicy {
 				t.Fatalf("ConfigureNetwork = %v, want %v", opts.ConfigureNetwork, tt.wantPolicy)
 			}
-			network := opts.NamespaceOptions.Find(string(specs.NetworkNamespace))
+			var network *define.NamespaceOption
+			for i := range opts.NamespaceOptions {
+				if opts.NamespaceOptions[i].Name == string(specs.NetworkNamespace) {
+					network = &opts.NamespaceOptions[i]
+				}
+			}
 			if !tt.wantOption {
 				if network != nil {
 					t.Fatalf("network namespace option = %#v, want nil", network)
