@@ -32,6 +32,209 @@ If in the example above, the image named `myregistry.local/private/alpine:custom
 
 Container images offer a great flexibility and reproducibility of lab builds, to embrace it fully, we wanted to capture some basic image management operations and workflows in this article.
 
+## Managed images
+
+Containerlab can manage image builds as part of a lab deployment. Managed images are declared under the top-level `images` section of the topology file, next to `name`, `mgmt`, `settings` and `topology`.
+
+This keeps node definitions focused on runtime intent. A node still starts from a single `image`; the `images` section describes how selected images are produced before they are used by nodes.
+
+```yaml
+name: managed-images
+
+images:
+  dpu-base:
+    image: localhost/dpu-base:latest
+    build:
+      mode: pre-deploy
+      context: ./dpu-base
+      rebuild: if-missing
+
+  dpu-01:
+    image: localhost/dpu-01:stage3
+    build:
+      mode: topology
+      node: dpu-01
+      rebuild: if-missing
+      builder:
+        image: localhost/dpu-base:latest
+        cmd: /usr/local/bin/build-dpu-stage3
+      commit:
+        cmd: ["/usr/sbin/init"]
+
+topology:
+  nodes:
+    dpu-01:
+      kind: linux
+      image: localhost/dpu-01:stage3
+```
+
+In this example, `dpu-base` is built before any node is deployed. The `dpu-01` node starts from `localhost/dpu-01:stage3`, and containerlab knows that this image should be produced by the `dpu-01` managed image target before the final node is started.
+
+The key under `images`, such as `dpu-base` or `dpu-01`, is a logical name used by the topology author. Nodes consume managed images by referencing the resulting image tag in their `image` field.
+
+### Build modes
+
+The `build.mode` field defines when and how an image is built.
+
+| Mode | Description |
+| ---- | ----------- |
+| `pre-deploy` | Builds the image with the container runtime image build API before node images are pulled and before nodes are created. |
+| `topology` | Starts a temporary builder container in the selected node's topology position, attaches its links, runs a build handoff command, commits the stopped container as the target image, removes the temporary container, and then starts the final node from the committed image. |
+
+If `mode` is omitted, `pre-deploy` is used.
+
+### Rebuild policy
+
+The `build.rebuild` field controls whether containerlab should rebuild an image when the output tag already exists locally.
+
+| Value | Description |
+| ----- | ----------- |
+| `if-missing` | Build the image only when the output image is missing. This is the default. |
+| `always` | Build the image on every deployment. |
+| `never` | Never build the image. Fail if the output image is missing. |
+
+### Pre-deploy builds
+
+`pre-deploy` builds use Dockerfile-style image builds. Paths are resolved relative to the topology file when they are not absolute.
+
+```yaml
+images:
+  tools:
+    image: localhost/tools:latest
+    build:
+      mode: pre-deploy
+      context: ./tools
+      dockerfile: Dockerfile
+      network: host
+      rebuild: if-missing
+```
+
+The supported fields are:
+
+| Field | Description |
+| ----- | ----------- |
+| `context` | Build context path. Defaults to `.`. |
+| `dockerfile` | Dockerfile name or path relative to the build context. Defaults to `Dockerfile`. |
+| `network` | Network mode passed to the image build operation. |
+| `rebuild` | Rebuild policy. |
+
+### Topology builds
+
+`topology` builds are useful when an image must be produced from a container that has been placed into the lab topology. A common pattern is to start from a reusable base image, let a topology-connected builder command discover or prepare node-specific state, then commit the resulting container as the image that the final node will run.
+
+```yaml
+images:
+  dpu-01:
+    image: localhost/dpu-01:stage3
+    build:
+      mode: topology
+      node: dpu-01
+      rebuild: if-missing
+      builder:
+        image: localhost/dpu-base:latest
+        cmd: /usr/local/bin/build-dpu-stage3
+      commit:
+        entrypoint: []
+        cmd: ["/usr/sbin/init"]
+
+topology:
+  nodes:
+    dpu-01:
+      kind: linux
+      image: localhost/dpu-01:stage3
+```
+
+For topology builds, `build.builder.image` and `build.builder.cmd` are required.
+
+The `node` field selects the topology node whose placement and links are used for the temporary builder container. If `node` is omitted, containerlab can infer it only when exactly one node consumes the target image. If multiple nodes reference the same target image, the build is ambiguous and containerlab will ask you to set `build.node`.
+
+The supported topology build fields are:
+
+| Field | Description |
+| ----- | ----------- |
+| `node` | Name of the node whose topology position is used for the temporary builder container. |
+| `builder.image` | Image used to start the temporary builder container. Required for `topology` mode. |
+| `builder.cmd` | Command executed inside the temporary builder container. Required for `topology` mode. |
+| `builder.entrypoint` | Optional entrypoint override for the temporary builder container. |
+| `commit.entrypoint` | Entrypoint stored in the committed image. |
+| `commit.cmd` | Command stored in the committed image. |
+| `rebuild` | Rebuild policy. |
+
+### Sharing build stages
+
+Managed image targets are reusable by image tag. This allows a shared base image to be built once and consumed by many later image builds.
+
+```yaml
+name: dpu-builds
+
+images:
+  dpu-base:
+    image: localhost/dpu-base:latest
+    build:
+      mode: pre-deploy
+      context: ./dpu-base
+      rebuild: if-missing
+
+  dpu-01:
+    image: localhost/dpu-01:stage3
+    build:
+      mode: topology
+      node: dpu-01
+      builder:
+        image: localhost/dpu-base:latest
+        cmd: /usr/local/bin/build-dpu-stage3
+
+  dpu-02:
+    image: localhost/dpu-02:stage3
+    build:
+      mode: topology
+      node: dpu-02
+      builder:
+        image: localhost/dpu-base:latest
+        cmd: /usr/local/bin/build-dpu-stage3
+
+topology:
+  nodes:
+    dpu-01:
+      kind: linux
+      image: localhost/dpu-01:stage3
+    dpu-02:
+      kind: linux
+      image: localhost/dpu-02:stage3
+```
+
+The `dpu-base` image is the shared build input. The two topology builds produce distinct output images, because each target has a unique `image` value.
+
+Containerlab rejects duplicate managed image targets that produce the same output image with different build definitions. Duplicate targets with identical build definitions are treated as the same target.
+
+### Node-level build shorthand
+
+When the build definition belongs to a single node and does not need a logical name, you can place `build` directly on the node. The node must still declare or inherit an `image`; internally, containerlab treats the node-level build as an anonymous managed image target for that image.
+
+```yaml
+topology:
+  nodes:
+    dpu-02:
+      kind: linux
+      image: localhost/dpu-02:stage3
+      build:
+        mode: topology
+        rebuild: if-missing
+        builder:
+          image: localhost/dpu-base:latest
+          cmd: /usr/local/bin/build-dpu-stage3
+        commit:
+          cmd: ["/usr/sbin/init"]
+```
+
+In this shorthand form, `dpu-02` still has a single runtime `image`. The nested `build` block tells containerlab how to create that image for this node before the final container is started.
+
+The shorthand is convenient for one-off images. Prefer top-level `images` when a build target is shared, when the topology has several image stages, or when you want the topology file to make the image lifecycle explicit.
+
+### Runtime support
+
+Image build and commit operations require Docker runtime support. Podman does not support managed image builds in this release.
+
 ## Tagging images
 
 A container image name can appear in various forms. A short form of `alpine` will be expanded by docker daemon to `docker.io/alpine:latest`. At the same time an image named `myregistry.local/private/alpine:custom` is already a fully qualified name and indicates the container registry (`myregistry.local`) image repository name (`private/alpine`) and its tag (`custom`).

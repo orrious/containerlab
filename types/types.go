@@ -150,17 +150,18 @@ type NodeConfig struct {
 	// changes for this node: live, restart or recreate. Empty means the kind decides.
 	LinkApplyMode LinkApplyMode `json:"link-apply-mode,omitempty"`
 	// path to config file that is actually mounted to the container and is a result of templation
-	ResStartupConfig string            `json:"startup-config-abs-path,omitempty"`
-	Config           *ConfigDispatcher `json:"config,omitempty"`
-	NodeType         string            `json:"type,omitempty"`
-	Position         string            `json:"position,omitempty"`
-	License          string            `json:"license,omitempty"`
-	Image            string            `json:"image,omitempty"`
-	ImagePullPolicy  PullPolicyValue   `json:"image-pull-policy,omitempty"`
-	Sysctls          map[string]string `json:"sysctls,omitempty"`
-	User             string            `json:"user,omitempty"`
-	Entrypoint       string            `json:"entrypoint,omitempty"`
-	Cmd              string            `json:"cmd,omitempty"`
+	ResStartupConfig string                `json:"startup-config-abs-path,omitempty"`
+	Config           *ConfigDispatcher     `json:"config,omitempty"`
+	NodeType         string                `json:"type,omitempty"`
+	Position         string                `json:"position,omitempty"`
+	License          string                `json:"license,omitempty"`
+	Image            string                `json:"image,omitempty"`
+	ImageBuild       *ImageBuildDefinition `json:"image-build,omitempty"`
+	ImagePullPolicy  PullPolicyValue       `json:"image-pull-policy,omitempty"`
+	Sysctls          map[string]string     `json:"sysctls,omitempty"`
+	User             string                `json:"user,omitempty"`
+	Entrypoint       string                `json:"entrypoint,omitempty"`
+	Cmd              string                `json:"cmd,omitempty"`
 	// Exec is a list of commands to execute inside the container backing the node.
 	Exec []string          `json:"exec,omitempty"`
 	Env  map[string]string `json:"env,omitempty"`

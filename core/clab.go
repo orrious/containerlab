@@ -64,8 +64,10 @@ type CLab struct {
 	managementNetworkOverridden bool
 	// gitBranch and gitHash cache Git repository information
 	// to avoid repeated repository opens. Empty strings indicate not yet cached.
-	gitBranch string
-	gitHash   string
+	gitBranch         string
+	gitHash           string
+	imageBuildTargets []*imageBuildTarget
+	managedImageNames map[string]struct{}
 }
 
 // NewContainerLab function defines a new container lab.
@@ -372,8 +374,15 @@ func (c *CLab) scheduleNodeWorkerF( //nolint: funlen
 
 			node.EnterStage(ctx, clabtypes.WaitForCreateLinks)
 
+			err := restoreTopologyBuilderLinks(ctx, node)
+			if err != nil {
+				log.Errorf("failed to restore topology image links for node %q: %v", node.Config().ShortName, err)
+				nodeFailCh <- fmt.Errorf("node %q restore topology image links: %w", node.Config().ShortName, err)
+				continue
+			}
+
 			// Deploy the Nodes link endpoints
-			err := node.DeployEndpoints(ctx)
+			err = node.DeployEndpoints(ctx)
 			if err != nil {
 				log.Errorf("failed deploy links for node %q: %v", node.Config().ShortName, err)
 				nodeFailCh <- fmt.Errorf("node %q deploy links: %w", node.Config().ShortName, err)

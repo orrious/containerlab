@@ -632,6 +632,10 @@ func (c *CLab) deployNode(ctx context.Context, node clabnodes.Node) error {
 		return fmt.Errorf("node %q pre-deploy: %w", nodeName, err)
 	}
 
+	if err := c.buildTopologyImage(ctx, node, false, nil); err != nil {
+		return fmt.Errorf("node %q image build: %w", nodeName, err)
+	}
+
 	if err := node.Deploy(ctx, &clabnodes.DeployParams{Nodes: c.Nodes}); err != nil {
 		return fmt.Errorf("node %q deploy: %w", nodeName, err)
 	}

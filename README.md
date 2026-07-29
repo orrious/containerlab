@@ -74,6 +74,68 @@ And, of course, containerlab is perfectly capable of wiring up arbitrary linux c
 <img src="https://gitlab.com/rdodin/pics/-/wikis/uploads/bb8d9163f265dc827428097e6726d949/image.png" width="80%">
 </p>
 
+### VM-like container clusters
+
+When a lab needs to model a VM made of multiple cooperating processes but the
+implementation must stay container-only, a useful pattern is to create a
+namespace-owner container and let application containers join its network
+namespace.
+
+In this model, the namespace-owner container acts as the VM boundary. It owns
+the topology-facing interfaces, routes, NAT and port-forwarding rules. The
+application containers run with `network-mode: container:<namespace-owner>` and
+therefore share the same interfaces, loopback addresses, routes and port space,
+similar to processes running inside one VM.
+
+```yaml
+topology:
+  nodes:
+    vm-ns:
+      kind: linux
+      image: localhost/vm-router:latest
+      cmd: /usr/local/bin/vm-router-init
+      sysctls:
+        net.ipv4.ip_forward: "1"
+
+    app-a:
+      kind: linux
+      image: localhost/app-a:latest
+      network-mode: container:vm-ns
+
+    app-b:
+      kind: linux
+      image: localhost/app-b:latest
+      network-mode: container:vm-ns
+
+    ceos:
+      kind: ceos
+      image: localhost/ceos:4.35.2F
+
+  links:
+    - endpoints: ["ceos:eth1", "vm-ns:eth1"]
+```
+
+The `vm-router-init` process can configure the shared namespace like a small VM
+router or firewall:
+
+```bash
+ip addr add 10.0.0.2/31 dev eth1
+ip route add default via 10.0.0.1
+
+# outbound NAT for traffic leaving the VM-like namespace
+iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE
+
+# inbound PAT from the topology-facing interface to a service in the namespace
+iptables -t nat -A PREROUTING -i eth1 -p tcp --dport 8080 \
+  -j REDIRECT --to-ports 80
+```
+
+Because the application containers share one network namespace, they also share
+one port space. Two applications cannot both bind `0.0.0.0:80` unless they are
+configured with distinct addresses or ports. This is intentional for the VM-like
+model: containerlab wires the namespace owner into the topology, while the
+joined containers behave like processes inside that namespace.
+
 This short clip briefly demonstrates containerlab features and explains its purpose:
 
 [![vid](https://gitlab.com/rdodin/pics/-/wikis/uploads/35d954fd81d9594ffa5b6110cbc950f5/clab-clip-stillshot.png)](https://youtu.be/xdi7rwdJgkg)

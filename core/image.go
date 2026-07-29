@@ -80,6 +80,9 @@ func (c *CLab) pullNodeImages(
 	images := node.GetImages(ctx)
 
 	for imageKey, imageName := range images {
+		if c.shouldSkipPullForManagedImage(imageKey, imageName) {
+			continue
+		}
 		if imageName == "" {
 			errCh <- fmt.Errorf(
 				"missing required %q attribute for node %q", imageKey, node.Config().ShortName,
@@ -113,6 +116,44 @@ func (c *CLab) pullNodeImages(
 			pullMutex.Unlock()
 
 			// Perform the actual pull
+			err := node.GetRuntime().PullImage(ctx, imageName, node.Config().ImagePullPolicy)
+			result.err = err
+			close(result.done)
+
+			if err != nil {
+				errCh <- err
+				return
+			}
+		}
+	}
+
+	builderImages, err := c.topologyBuilderImagesForNode(node)
+	if err != nil {
+		errCh <- err
+		return
+	}
+	for _, imageName := range builderImages {
+		imageKey := fmt.Sprintf("%s:%s", imageName, node.Config().ImagePullPolicy)
+
+		pullMutex.Lock()
+
+		if existing, found := ongoingPulls[imageKey]; found {
+			pullMutex.Unlock()
+			<-existing.done
+
+			if existing.err != nil {
+				errCh <- existing.err
+				return
+			}
+		} else {
+			result := &pullResult{
+				done: make(chan struct{}),
+			}
+
+			ongoingPulls[imageKey] = result
+
+			pullMutex.Unlock()
+
 			err := node.GetRuntime().PullImage(ctx, imageName, node.Config().ImagePullPolicy)
 			result.err = err
 			close(result.done)

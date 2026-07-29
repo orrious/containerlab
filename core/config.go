@@ -51,14 +51,15 @@ const (
 
 // Config defines lab configuration as it is provided in the YAML file.
 type Config struct {
-	Name     string              `json:"name,omitempty"`
-	Prefix   *string             `json:"prefix,omitempty"`
-	Mgmt     *clabtypes.MgmtNet  `json:"mgmt,omitempty"`
-	Settings *clabtypes.Settings `json:"settings,omitempty"`
-	Topology *clabtypes.Topology `json:"topology,omitempty"`
+	Name     string                                `json:"name,omitempty" yaml:"name,omitempty"`
+	Prefix   *string                               `json:"prefix,omitempty" yaml:"prefix,omitempty"`
+	Mgmt     *clabtypes.MgmtNet                    `json:"mgmt,omitempty" yaml:"mgmt,omitempty"`
+	Settings *clabtypes.Settings                   `json:"settings,omitempty" yaml:"settings,omitempty"`
+	Images   map[string]*clabtypes.ImageDefinition `json:"images,omitempty" yaml:"images,omitempty"`
+	Topology *clabtypes.Topology                   `json:"topology,omitempty" yaml:"topology,omitempty"`
 	// the debug flag value as passed via cli
 	// may be used by other packages to enable debug logging
-	Debug bool `json:"debug"`
+	Debug bool `json:"debug" yaml:"debug"`
 }
 
 // ParseTopology parses the lab topology.
@@ -256,6 +257,7 @@ func (c *CLab) createNodeCfg( //nolint: funlen
 		NodeType:        c.Config.Topology.GetNodeType(nodeName),
 		Position:        c.Config.Topology.GetNodePosition(nodeName),
 		Image:           c.Config.Topology.GetNodeImage(nodeName),
+		ImageBuild:      c.Config.Topology.GetNodeImageBuild(nodeName),
 		ImagePullPolicy: c.Config.Topology.GetNodeImagePullPolicy(nodeName),
 		User:            c.Config.Topology.GetNodeUser(nodeName),
 		Entrypoint:      c.Config.Topology.GetNodeEntrypoint(nodeName),
@@ -263,6 +265,7 @@ func (c *CLab) createNodeCfg( //nolint: funlen
 		Exec:            c.Config.Topology.GetNodeExec(nodeName),
 		Env:             c.Config.Topology.GetNodeEnv(nodeName),
 		NetworkMode:     c.Config.Topology.GetNodeNetworkMode(nodeName),
+		CgroupnsMode:    c.Config.Topology.GetNodeCgroupnsMode(nodeName),
 		Sysctls:         c.Config.Topology.GetSysCtl(nodeName),
 		Runtime:         c.Config.Topology.GetNodeRuntime(nodeName),
 		Devices:         c.Config.Topology.GetNodeDevices(nodeName),
@@ -466,6 +469,14 @@ func (c *CLab) checkTopologyDefinition(ctx context.Context) error {
 	}
 
 	if err := c.verifyContainersUniqueness(ctx); err != nil {
+		return err
+	}
+
+	if err := c.validateImageBuildDefinitions(); err != nil {
+		return err
+	}
+
+	if err := c.buildPreDeployImages(ctx); err != nil {
 		return err
 	}
 

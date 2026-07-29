@@ -768,6 +768,7 @@ func (d *DockerRuntime) CreateContainer( //nolint: funlen
 		Sysctls:      node.Sysctls,
 		Privileged:   node.Privileged,
 		Tmpfs:        node.Tmpfs,
+		CgroupnsMode: container.CgroupnsMode(node.CgroupnsMode),
 		PidMode:      "",
 		SecurityOpt:  node.SecurityOpts,
 		// Network mode will be defined below via switch
@@ -1557,6 +1558,10 @@ func (d *DockerRuntime) StopContainer(
 
 	if stopSignal != "" {
 		stopOpts.Signal = string(stopSignal)
+		if stopSignal == clabtypes.SIGKILL {
+			timeout = 0
+			stopOpts.Timeout = &timeout
+		}
 		log.Debugf("using custom stop signal %q for container %q", stopSignal, name)
 	}
 

@@ -597,6 +597,26 @@ func (t *Topology) GetNodeImage(nodeName string) string {
 	)
 }
 
+func (t *Topology) GetNodeImageBuild(nodeName string) *ImageBuildDefinition {
+	if node := t.Nodes[nodeName]; node != nil && node.ImageBuild != nil {
+		node.ImageBuild.Normalize()
+		return node.ImageBuild
+	}
+	if group := t.GetGroup(t.GetNodeGroup(nodeName)); group != nil && group.ImageBuild != nil {
+		group.ImageBuild.Normalize()
+		return group.ImageBuild
+	}
+	if kind := t.GetKind(t.GetNodeKind(nodeName)); kind != nil && kind.ImageBuild != nil {
+		kind.ImageBuild.Normalize()
+		return kind.ImageBuild
+	}
+	if defaults := t.GetDefaults(); defaults != nil && defaults.ImageBuild != nil {
+		defaults.ImageBuild.Normalize()
+		return defaults.ImageBuild
+	}
+	return nil
+}
+
 func (t *Topology) GetNodeImagePullPolicy(nodeName string) PullPolicyValue {
 	return ParsePullPolicyValue(
 		getField(
