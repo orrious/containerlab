@@ -109,8 +109,6 @@ type NodeDefinition struct {
 	// container networking mode. if set to `host` the host networking will be used for this node,
 	//  else bridged network
 	NetworkMode string `yaml:"network-mode,omitempty"`
-	// container cgroup namespace mode. Valid values are runtime dependent, typically host or private.
-	CgroupnsMode string `yaml:"cgroupns-mode,omitempty"`
 	// Override container runtime
 	Runtime string `yaml:"runtime,omitempty"`
 	// Set node CPU (cgroup or hypervisor)
